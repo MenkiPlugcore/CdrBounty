@@ -133,6 +133,14 @@ public final class AdminCommand implements CommandExecutor {
         OfflinePlayer target = Bukkit.getOfflinePlayer(args[1]);
         UUID actor = sender instanceof Player player ? player.getUniqueId() : null;
         refunds.cancelAll(actor, target.getUniqueId())
+                .thenCompose(total -> repository.audit(
+                                actor,
+                                "ADMIN_CANCEL_ALL",
+                                target.getUniqueId(),
+                                total,
+                                "Cancelled all active bounty contributions; refund policy=" + plugin.settings().cancelRefundPolicy(),
+                                Instant.now())
+                        .thenApply(ignored -> total))
                 .thenAccept(total -> MainThread.run(plugin, () -> sender.sendMessage(
                         "§aBounty aktif §e" + safeName(target) + "§a dibatalkan. Escrow diproses: §6" + economy.format(total))))
                 .exceptionally(ex -> {
