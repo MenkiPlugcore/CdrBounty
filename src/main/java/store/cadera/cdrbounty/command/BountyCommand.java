@@ -123,7 +123,8 @@ public final class BountyCommand implements CommandExecutor {
             sender.sendMessage(messages.text("no-permission"));
             return true;
         }
-        repository.listActiveTotals(Instant.now(), 10).thenAccept(entries -> MainThread.run(plugin, () -> {
+        // Fetch all practical targets first so aggregation is complete before applying the UI top-10 limit.
+        repository.listActiveTotals(Instant.now(), Integer.MAX_VALUE).thenAccept(entries -> MainThread.run(plugin, () -> {
             sender.sendMessage("§6§lCdrBounty §8— §eTop Active Bounties");
             if (entries.isEmpty()) {
                 sender.sendMessage("§7Belum ada bounty aktif.");
@@ -131,6 +132,7 @@ public final class BountyCommand implements CommandExecutor {
             }
             int index = 1;
             for (BountyRepository.TargetTotal entry : entries) {
+                if (index > 10) break;
                 OfflinePlayer target = Bukkit.getOfflinePlayer(entry.targetUuid());
                 String name = target.getName() == null ? entry.targetUuid().toString() : target.getName();
                 sender.sendMessage("§e" + index++ + ". §f" + name + " §8— §6" + economy.format(entry.amount()));
