@@ -1,0 +1,6 @@
+provider: SQLITE
+sqlite:
+  file: bounty.db
+  busy-timeout-ms: 5000
+  journal-mode: WAL
+  synchronous: NORMAL
