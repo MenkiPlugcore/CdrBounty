@@ -1,0 +1,3 @@
+# Reserved for future GUI milestones.
+# beta.1 remains command-first so core lifecycle and economy invariants stay testable.
+enabled: false
