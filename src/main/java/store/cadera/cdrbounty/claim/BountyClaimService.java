@@ -41,17 +41,17 @@ public final class BountyClaimService {
 
         return repository.activeTotal(victim.getUniqueId(), now)
                 .thenCompose(total -> {
-                    if (total.signum() <= 0) return CompletableFuture.completedFuture(Result.noBounty());
-                    return MainThread.call(plugin, () -> antiFarm.evaluate(killer, victim, now))
-                            .thenCompose(Function.identity());
-                })
-                .thenCompose(decision -> {
-                    if (decision instanceof Result result) return CompletableFuture.completedFuture(result);
-                    AntiFarmService.Decision antiFarmDecision = (AntiFarmService.Decision) decision;
-                    if (!antiFarmDecision.allowed()) {
-                        return CompletableFuture.completedFuture(Result.blocked(antiFarmDecision.reason()));
+                    if (total.signum() <= 0) {
+                        return CompletableFuture.completedFuture(Result.noBounty());
                     }
-                    return prepareAndPay(victim, killer, now);
+                    return MainThread.call(plugin, () -> antiFarm.evaluate(killer, victim, now))
+                            .thenCompose(Function.identity())
+                            .thenCompose(decision -> {
+                                if (!decision.allowed()) {
+                                    return CompletableFuture.completedFuture(Result.blocked(decision.reason()));
+                                }
+                                return prepareAndPay(victim, killer, now);
+                            });
                 })
                 .exceptionally(ex -> Result.failed(rootMessage(ex)));
     }
