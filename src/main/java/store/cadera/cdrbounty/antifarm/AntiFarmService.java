@@ -2,6 +2,7 @@ package store.cadera.cdrbounty.antifarm;
 
 import org.bukkit.entity.Player;
 import store.cadera.cdrbounty.config.PluginSettings;
+import store.cadera.cdrbounty.storage.BountyMaintenanceRepository;
 import store.cadera.cdrbounty.storage.BountyRepository;
 
 import java.net.InetAddress;
@@ -12,10 +13,13 @@ import java.util.function.Supplier;
 
 public final class AntiFarmService {
     private final BountyRepository repository;
+    private final BountyMaintenanceRepository maintenance;
     private final Supplier<PluginSettings> settings;
 
-    public AntiFarmService(BountyRepository repository, Supplier<PluginSettings> settings) {
+    public AntiFarmService(BountyRepository repository, BountyMaintenanceRepository maintenance,
+                           Supplier<PluginSettings> settings) {
         this.repository = repository;
+        this.maintenance = maintenance;
         this.settings = settings;
     }
 
@@ -38,7 +42,12 @@ public final class AntiFarmService {
 
         CompletableFuture<BountyRepository.PairHistory> pairFuture =
                 repository.pairHistory(killer.getUniqueId(), victim.getUniqueId());
-        CompletableFuture<Instant> targetFuture = repository.lastPaidClaimAgainst(victim.getUniqueId());
+        CompletableFuture<Instant> targetFuture = maintenance.claimHistory(victim.getUniqueId(), 20)
+                .thenApply(history -> history.stream()
+                        .filter(item -> "PAID".equals(item.status()) && item.paidAt() != null)
+                        .map(BountyMaintenanceRepository.ClaimHistory::paidAt)
+                        .findFirst()
+                        .orElse(null));
 
         return pairFuture.thenCombine(targetFuture, (pair, lastTargetClaim) -> {
             if (pair.lastClaimAt() != null && cfg.killerVictimCooldownSeconds() > 0
