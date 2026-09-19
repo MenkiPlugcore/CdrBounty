@@ -5,6 +5,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 import store.cadera.cdrbounty.config.PluginSettings;
 import store.cadera.cdrbounty.economy.MoneyMath;
 import store.cadera.cdrbounty.economy.VaultEconomyAdapter;
+import store.cadera.cdrbounty.storage.BountyMaintenanceRepository;
 import store.cadera.cdrbounty.storage.BountyRepository;
 
 import java.math.BigDecimal;
@@ -15,13 +16,15 @@ import java.util.function.Supplier;
 public final class RecoveryService {
     private final JavaPlugin plugin;
     private final BountyRepository repository;
+    private final BountyMaintenanceRepository maintenance;
     private final VaultEconomyAdapter economy;
     private final Supplier<PluginSettings> settings;
 
-    public RecoveryService(JavaPlugin plugin, BountyRepository repository, VaultEconomyAdapter economy,
-                           Supplier<PluginSettings> settings) {
+    public RecoveryService(JavaPlugin plugin, BountyRepository repository, BountyMaintenanceRepository maintenance,
+                           VaultEconomyAdapter economy, Supplier<PluginSettings> settings) {
         this.plugin = plugin;
         this.repository = repository;
+        this.maintenance = maintenance;
         this.economy = economy;
         this.settings = settings;
     }
@@ -44,7 +47,7 @@ public final class RecoveryService {
         }).thenCompose(snapshot -> switch (operation.type()) {
             case WITHDRAWAL -> recoverWithdrawal(operation, snapshot);
             case PAYOUT -> recoverPayout(operation, snapshot);
-            case REFUND -> repository.markOperationAmbiguous(operation.operationId(), "REFUND recovery not implemented in this beta.1 revision");
+            case REFUND -> recoverRefund(operation, snapshot);
         }).exceptionallyCompose(ex -> repository.markOperationAmbiguous(
                 operation.operationId(), "Recovery exception: " + rootMessage(ex)));
     }
@@ -89,6 +92,32 @@ public final class RecoveryService {
             return repository.recoverClaimAsPaid(
                     operation.claimId(), operation.operationId(), deposit.balanceAfter(), Instant.now(),
                     settings.get().repeatedPairWindowSeconds());
+        });
+    }
+
+    private CompletableFuture<Void> recoverRefund(BountyRepository.RecoveryOperation operation, BalanceSnapshot snapshot) {
+        BigDecimal before = normalize(operation.balanceBefore());
+        BigDecimal expectedAfter = normalize(before.add(operation.amount()));
+        if (snapshot.balance().compareTo(expectedAfter) == 0) {
+            plugin.getLogger().warning("Recovered completed bounty refund " + operation.operationId());
+            return maintenance.completeRefund(
+                    operation.contributionId(), operation.operationId(), snapshot.balance(), Instant.now());
+        }
+        if (snapshot.balance().compareTo(before) != 0) {
+            return repository.markOperationAmbiguous(operation.operationId(),
+                    "Refund balance is ambiguous: before=" + before + ", current=" + snapshot.balance());
+        }
+
+        return MainThread.call(plugin, () -> {
+            VaultEconomyAdapter.Result result = economy.deposit(snapshot.player(), operation.amount());
+            return new RecoveryDeposit(result, normalize(economy.balance(snapshot.player())));
+        }).thenCompose(deposit -> {
+            if (!deposit.result().success()) {
+                return repository.markOperationAmbiguous(operation.operationId(),
+                        "Recovery refund failed: " + deposit.result().safeError());
+            }
+            return maintenance.completeRefund(
+                    operation.contributionId(), operation.operationId(), deposit.balanceAfter(), Instant.now());
         });
     }
 
