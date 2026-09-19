@@ -11,6 +11,7 @@ import store.cadera.cdrbounty.command.AdminCommand;
 import store.cadera.cdrbounty.command.BountyCommand;
 import store.cadera.cdrbounty.config.MessageService;
 import store.cadera.cdrbounty.config.PluginSettings;
+import store.cadera.cdrbounty.core.MainThread;
 import store.cadera.cdrbounty.core.RecoveryService;
 import store.cadera.cdrbounty.economy.VaultEconomyAdapter;
 import store.cadera.cdrbounty.storage.BountyMaintenanceRepository;
@@ -41,7 +42,7 @@ public final class CdrBountyPlugin extends JavaPlugin {
             maintenance = new SQLiteMaintenanceRepository(settings);
             maintenance.initialize();
 
-            AntiFarmService antiFarm = new AntiFarmService(repository, this::settings);
+            AntiFarmService antiFarm = new AntiFarmService(repository, maintenance, this::settings);
             BountyPlacementService placement = new BountyPlacementService(this, repository, economy, this::settings);
             BountyClaimService claim = new BountyClaimService(this, repository, economy, antiFarm, this::settings);
             BountyRefundService refunds = new BountyRefundService(this, maintenance, economy, this::settings);
@@ -57,11 +58,11 @@ public final class CdrBountyPlugin extends JavaPlugin {
 
             new RecoveryService(this, repository, maintenance, economy, this::settings)
                     .recover()
-                    .thenRun(() -> {
+                    .thenRun(() -> MainThread.run(this, () -> {
                         getLogger().info("Economy recovery scan completed.");
                         refunds.startExpirationTask();
                         refunds.scanExpired();
-                    })
+                    }))
                     .exceptionally(ex -> {
                         getLogger().severe("Economy recovery scan failed; expiration processing was not started: " + rootMessage(ex));
                         return null;
