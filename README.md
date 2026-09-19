@@ -6,11 +6,11 @@ CdrBounty is a gameplay-first bounty hunting framework for Minecraft servers. In
 
 ## Project Status
 
-**Phase:** Planning / Roadmap
+**Phase:** `beta.1 — Core Foundation` (active development)
 
 **Primary target:** Paper 1.21.11, Java 21
 
-No production build is available yet. Development will follow the roadmap documents in this repository.
+The beta.1 source foundation is now implemented in the repository. It includes Vault-backed placement and payout, SQLite persistence, crash-aware economy intents, claim locking, basic anti-farming, expiration/refund processing, admin inspection/history controls, and Java 21 Maven CI. It is still a development build and should be validated on a staging server before production use.
 
 ## Core Design Pillars
 
@@ -21,6 +21,46 @@ No production build is available yet. Development will follow the roadmap docume
 5. **Dynamic wanted gameplay** — Heat, automatic system bounties, Most Wanted, Public Enemy, and bounty escalation.
 6. **Abuse-resistant economy** — escrow, anti-farming, suspicious-claim scoring, audit logs, configurable payout rules.
 7. **Platform for other plugins** — PlaceholderAPI, Vault, Citizens, WorldGuard, APIs, events, and optional integrations.
+
+## beta.1 Commands
+
+Player:
+
+- `/bounty add <player> <amount>`
+- `/bounty view <player>`
+- `/bounty list`
+
+Administration:
+
+- `/cdrbounty reload`
+- `/cdrbounty add <player> <amount>`
+- `/cdrbounty remove <player> all`
+- `/cdrbounty inspect <player>`
+- `/cdrbounty history <player>`
+- `/cdrbounty debug`
+
+Partial-value admin removal is intentionally not enabled yet; cancellation currently operates on all active contributions for the target so issuer ownership and refunds remain deterministic.
+
+## Build
+
+Requirements:
+
+- JDK 21
+- Maven 3.9+
+
+Build and test:
+
+```bash
+mvn clean test package
+```
+
+The packaged JAR is produced under `target/`. GitHub Actions also runs the Java 21 build/test gate on pushes and pull requests to `main`.
+
+Runtime requirements for beta.1:
+
+- Paper 1.21.11
+- Vault
+- A Vault-compatible economy provider
 
 ## Roadmap
 
@@ -47,4 +87,4 @@ Start from [`docs/README.md`](docs/README.md).
 
 ## License
 
-A project license will be added before the first public binary release. Third-party libraries and integrations remain subject to their respective licenses.
+CdrBounty is distributed under the **MENKIESTES SOFTWARE LICENSE v1.0** included in [`LICENSE`](LICENSE). Source availability does not mean open-source redistribution or commercial use is permitted. Third-party dependencies remain under their respective licenses.
