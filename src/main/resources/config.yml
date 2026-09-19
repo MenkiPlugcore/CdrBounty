@@ -1,0 +1,30 @@
+economy:
+  minimum-bounty: 100.00
+  maximum-bounty: 100000000.00
+  placement-fee-percent: 2.5
+  decimal-scale: 2
+
+placement:
+  allow-self-bounty: false
+  allow-offline-targets: true
+  stacking-enabled: true
+  minimum-playtime-seconds: 0
+  maximum-active-bounty-per-target: 100000000.00
+  duration-seconds: 604800
+  blacklisted-worlds: []
+
+claim:
+  blacklisted-worlds: []
+  killer-victim-cooldown-seconds: 3600
+  repeated-pair-window-seconds: 86400
+  repeated-pair-max-claims: 2
+  same-ip-policy: BLOCK
+  minimum-survival-after-claim-seconds: 300
+
+refund:
+  on-expire: FULL
+  on-admin-cancel: FULL
+
+runtime:
+  expiration-scan-seconds: 30
+  debug: false
