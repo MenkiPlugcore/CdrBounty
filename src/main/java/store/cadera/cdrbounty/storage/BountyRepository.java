@@ -37,6 +37,8 @@ public interface BountyRepository extends AutoCloseable {
 
     CompletableFuture<PairHistory> pairHistory(UUID killerUuid, UUID victimUuid);
 
+    CompletableFuture<Instant> lastPaidClaimAgainst(UUID victimUuid);
+
     CompletableFuture<ClaimPreparation> prepareClaim(
             UUID claimId,
             UUID payoutOperationId,
