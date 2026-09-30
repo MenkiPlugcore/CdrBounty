@@ -93,7 +93,7 @@ public final class BountyPlacementWizard implements Listener {
             case PRIVATE_HUNTERS -> promptPrivateHunters(player, session);
             case OPTIONS -> openSetup(player);
             case CONDITIONS -> openConditions(player);
-            case WORLD -> openWorldMenu(player);
+            case WORLD -> openWorld(player);
             case CONFIRM -> openConfirm(player);
         }
     }
