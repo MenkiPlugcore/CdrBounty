@@ -27,15 +27,16 @@ jobs:
       - name: Test and package
         run: mvn -B --no-transfer-progress clean verify
 
-      - name: Validate plugin jar
+      - name: Validate production jar
         shell: bash
         run: |
           set -euo pipefail
-          JAR="target/CdrBounty-0.9.0.jar"
+          JAR="target/CdrBounty-1.0.0.jar"
           test -f "$JAR"
           jar tf "$JAR" > jar-contents.txt
           grep -qx 'plugin.yml' jar-contents.txt
           grep -qx 'config.yml' jar-contents.txt
+          grep -qx 'META-INF/LICENSE' jar-contents.txt
           grep -q 'store/cadera/cdrbounty/config/ConfigMigrationService.class' jar-contents.txt
           grep -q 'store/cadera/cdrbounty/diagnostic/ProductionDiagnosticsService.class' jar-contents.txt
           grep -q 'store/cadera/cdrbounty/tracking/BountyTrackerService.class' jar-contents.txt
@@ -43,20 +44,22 @@ jobs:
           grep -q 'store/cadera/cdrbounty/quest/QuestBountyService.class' jar-contents.txt
           unzip -p "$JAR" plugin.yml > packaged-plugin.yml
           unzip -p "$JAR" config.yml > packaged-config.yml
-          grep -q '^version: 0.9.0$' packaged-plugin.yml
+          grep -q '^version: 1.0.0$' packaged-plugin.yml
           grep -q '^config-version: 9$' packaged-config.yml
           grep -q '^  minimum-hunter-playtime-seconds: 0$' packaged-config.yml
           grep -q '^  minimum-target-playtime-seconds: 0$' packaged-config.yml
+          grep -q '^  cdrbounty.admin.diagnose:' packaged-plugin.yml
           grep -q 'diagnose' packaged-plugin.yml
+          grep -q '^depend: \[Vault, Citizens\]$' packaged-plugin.yml
           if grep -q '^  bounty:' packaged-plugin.yml; then
             echo 'Player /bounty command must not be registered.' >&2
             exit 1
           fi
 
-      - name: Upload plugin jar
+      - name: Upload production jar
         if: success()
         uses: actions/upload-artifact@v7
         with:
-          name: CdrBounty-0.9.0
-          path: target/CdrBounty-0.9.0.jar
+          name: CdrBounty-1.0.0
+          path: target/CdrBounty-1.0.0.jar
           if-no-files-found: error
