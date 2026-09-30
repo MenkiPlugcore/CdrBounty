@@ -21,9 +21,12 @@ import store.cadera.cdrbounty.contract.SQLiteContractRepository;
 import store.cadera.cdrbounty.core.MainThread;
 import store.cadera.cdrbounty.core.RecoveryService;
 import store.cadera.cdrbounty.economy.VaultEconomyAdapter;
+import store.cadera.cdrbounty.integration.betonquest.BetonQuestBootstrap;
 import store.cadera.cdrbounty.npc.BountyNpcBindingService;
 import store.cadera.cdrbounty.npc.BountyNpcService;
 import store.cadera.cdrbounty.npc.BountyPlacementWizard;
+import store.cadera.cdrbounty.quest.QuestBountyRepository;
+import store.cadera.cdrbounty.quest.QuestBountyService;
 import store.cadera.cdrbounty.reputation.ReputationAutoBountyRepository;
 import store.cadera.cdrbounty.reputation.ReputationAutoBountyService;
 import store.cadera.cdrbounty.storage.BountyMaintenanceRepository;
@@ -47,6 +50,7 @@ public final class CdrBountyPlugin extends JavaPlugin {
     private ApprovalRepository approvalRepository;
     private TrackingRepository trackingRepository;
     private ReputationAutoBountyRepository reputationBountyRepository;
+    private QuestBountyRepository questBountyRepository;
     private BountyNpcBindingService npcBinding;
 
     @Override
@@ -69,6 +73,8 @@ public final class CdrBountyPlugin extends JavaPlugin {
             trackingRepository.initialize();
             reputationBountyRepository = new ReputationAutoBountyRepository(settings);
             reputationBountyRepository.initialize();
+            questBountyRepository = new QuestBountyRepository(settings);
+            questBountyRepository.initialize();
 
             AntiFarmService antiFarm = new AntiFarmService(repository, maintenance, this::settings);
             BountyPlacementService placement = new BountyPlacementService(this, repository, economy, this::settings);
@@ -81,6 +87,7 @@ public final class CdrBountyPlugin extends JavaPlugin {
                     this, repository, contractRepository, economy, antiFarm, this::settings);
             BountyTrackerService trackers = new BountyTrackerService(this, trackingRepository);
             ReputationAutoBountyService reputationBounties = new ReputationAutoBountyService(this, reputationBountyRepository);
+            QuestBountyService questBounties = new QuestBountyService(this, questBountyRepository, trackers, this::settings);
             ContractGuiService gui = new ContractGuiService(this, contracts, economy, trackers);
             ApprovalAdminGui approvalGui = new ApprovalAdminGui(this, approvals, economy);
             npcBinding = new BountyNpcBindingService(this);
@@ -98,6 +105,22 @@ public final class CdrBountyPlugin extends JavaPlugin {
             getServer().getPluginManager().registerEvents(npcService, this);
             getServer().getPluginManager().registerEvents(approvalGui, this);
             getServer().getPluginManager().registerEvents(trackers, this);
+
+            boolean questIntegrationRegistered = false;
+            if (getServer().getPluginManager().getPlugin("BetonQuest") != null) {
+                try {
+                    questIntegrationRegistered = BetonQuestBootstrap.register(this, questBounties);
+                } catch (LinkageError error) {
+                    getLogger().warning("BetonQuest found but quest integration API is incompatible. CdrBounty continues without quest hooks: "
+                            + error.getMessage());
+                }
+            } else {
+                getLogger().info("BetonQuest not found; quest bounty hooks are disabled.");
+            }
+
+            if (questIntegrationRegistered) {
+                getLogger().info("BetonQuest integration registered: cdrbounty_create, cdrbounty_cancel, cdrbounty_has, cdrbounty_active, cdrbounty_completed.");
+            }
 
             new RecoveryService(this, repository, maintenance, economy, this::settings)
                     .recover()
@@ -120,7 +143,7 @@ public final class CdrBountyPlugin extends JavaPlugin {
                     });
 
             getLogger().info("CdrBounty " + getPluginMeta().getVersion()
-                    + " enabled with NPC-only access + Approval + Tracking + Reputation Auto-Bounty + SQLite + Vault.");
+                    + " enabled with NPC-only access + Approval + Tracking + Reputation + Quest Integration + SQLite + Vault.");
         } catch (Exception ex) {
             getLogger().severe("CdrBounty failed to start safely: " + rootMessage(ex));
             ex.printStackTrace();
@@ -130,6 +153,7 @@ public final class CdrBountyPlugin extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        if (questBountyRepository != null) questBountyRepository.close();
         if (reputationBountyRepository != null) reputationBountyRepository.close();
         if (trackingRepository != null) trackingRepository.close();
         if (approvalRepository != null) approvalRepository.close();
