@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.6.0 — Quest Integration
+
+- Added native BetonQuest 3.2.0 integration through `IntegrationService`.
+- Added `cdrbounty_create <questKey> <targetNameOrUuid> <amount>`.
+- Added `cdrbounty_cancel <questKey>`.
+- Added `cdrbounty_has <questKey>`, `cdrbounty_active <questKey>`, and `cdrbounty_completed <questKey>` conditions.
+- Added persistent `quest_bounty_links` binding each player + quest key to the latest quest bounty attempt.
+- Quest-created bounties are system-funded, `PRIVATE + EXCLUSIVE`, allowlisted to the quest player, and auto-accepted.
+- Quest-created bounties bypass player-request admin approval while still using normal anti-farm, settlement, payout, tracking, and pause logic.
+- The Bounty Tracker is issued automatically when a quest bounty is created or an already-active quest bounty is reused.
+- Repeated create actions for the same player/key reuse the active attempt instead of duplicating rewards.
+- Once the latest attempt is terminal, the same quest key can create a new bounty, supporting repeatable quest designs.
+- Quest cancellation cancels the system-funded contribution/contract and removes the player's tracker without refund logic.
+- Quest bounty creation writes contribution, contract, allowlist, hunter reservation, quest link, history, and audit data in one SQLite transaction.
+- Added BetonQuest and CdrQuestJournal as soft dependencies; core NPC bounty gameplay remains loadable without them.
+- Documented the recommended `BetonQuest → CdrBounty → CdrQuestJournal` flow while preserving CdrQuestJournal safe turn-in authority.
+- CI now validates quest integration classes and the `0.6.0` artifact.
+
 ## 0.5.0 — Reputation Auto-Bounty
 
 - Added optional runtime integration with CdrReputation through Bukkit ServicesManager and `ReputationChangeEvent`.
