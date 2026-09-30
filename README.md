@@ -2,15 +2,15 @@
 
 > **You don't claim bounties. You hunt people.**
 
-CdrBounty is an NPC-driven bounty framework for Paper servers. Normal players interact through a Citizens Bounty Master NPC. Player-created bounty requests require administrator approval, and accepted hunters receive an intentionally inaccurate compass tracker.
+CdrBounty is an NPC-driven bounty framework for Paper servers. Normal players interact through a Citizens Bounty Master NPC. Player-created bounty requests require administrator approval, accepted hunters receive an intentionally inaccurate compass tracker, and very poor CdrReputation can automatically create system-funded bounties.
 
 ## Current Release
 
-**CdrBounty `0.4.0 — Inaccurate Compass Tracking`**
+**CdrBounty `0.5.0 — Reputation Auto-Bounty`**
 
-Target: Paper 1.21.11, Java 21, Vault, Citizens, and a Vault-compatible economy provider.
+Target: Paper 1.21.11, Java 21, Vault, Citizens, and a Vault-compatible economy provider. CdrReputation is an optional soft dependency used by the automatic system-bounty integration.
 
-## Player Flow
+## Core Flow
 
 Normal players have **no `/bounty` command**.
 
@@ -26,9 +26,7 @@ Bounty Tracker Compass
 Approximate target direction
 ```
 
-Accepted contracts can also be viewed through **My Contracts**. Left-click an accepted contract to reissue its tracker; right-click to abandon it.
-
-## Player-Created Bounty Approval
+Player-created bounties still use:
 
 ```text
 NPC Placement Wizard
@@ -42,13 +40,69 @@ PENDING_APPROVAL
 └─ REJECT  → full requester refund
 ```
 
-Pending requests cannot be accepted or claimed. Approval starts the active bounty timer. Rejection uses the recoverable refund pipeline.
+## Reputation Auto-Bounty
+
+When CdrReputation is installed, CdrBounty hooks its Bukkit service and `ReputationChangeEvent` at runtime. CdrBounty does not read or modify the CdrReputation database directly.
+
+Default thresholds are cumulative:
+
+```text
+Reputation <= -1000 → +25,000 system bounty
+Reputation <= -2000 → +25,000 additional bounty
+Reputation <= -3500 → +50,000 additional bounty
+
+Maximum cumulative automatic escalation: 100,000
+```
+
+A large reputation drop can cross several thresholds at once. For example, moving directly to `-2500` creates a `50,000` system bounty rather than requiring two separate reputation events.
+
+System bounties:
+
+- are funded by the server/system rather than a player's Vault balance;
+- become `OPEN` immediately;
+- bypass administrator approval;
+- appear in the same NPC Bounty Board;
+- show `Issuer: SYSTEM`;
+- use the same hunter accept, compass tracking, claim validation, pause timer, anti-farm, and payout pipeline as normal contracts.
+
+The plugin stores the most severe reputation threshold already issued for each player, so repeated reputation updates inside the same tier do **not** create duplicate bounties. The escalation becomes armed again only after reputation recovers to the configured reset threshold.
+
+Default configuration:
+
+```yaml
+reputation-auto-bounty:
+  enabled: true
+  announce: true
+  reset-threshold: -500
+  tiers:
+    outlaw:
+      threshold: -1000
+      add-bounty: "25000.00"
+    infamous:
+      threshold: -2000
+      add-bounty: "25000.00"
+    public-enemy:
+      threshold: -3500
+      add-bounty: "50000.00"
+```
+
+This keeps the responsibilities separate:
+
+```text
+CdrReputation
+      ↓ ReputationChangeEvent
+CdrBounty
+      ↓ system contract
+Bounty Master NPC
+      ↓
+Hunter
+```
+
+Future systems such as CdrReport can reduce reputation only after an administrator validates a report; if that penalty crosses one of these thresholds, CdrBounty naturally issues the configured system bounty.
 
 ## Inaccurate Bounty Tracker
 
-The compass never receives the target's exact location. CdrBounty creates a random offset around the target every tracker refresh.
-
-Default accuracy bands:
+The compass never receives the target's exact location. Default accuracy:
 
 ```text
 0–300 blocks      → ±25 blocks
@@ -57,42 +111,9 @@ Default accuracy bands:
 >2000             → ±120 blocks
 ```
 
-The approximate location is regenerated periodically, so the compass behaves like a tracking signal rather than GPS.
+The approximate point is regenerated on refresh. Cross-world targets produce **Signal Lost** instead of exposing coordinates.
 
-If the target is in another world/dimension, the tracker reports **Signal Lost** instead of leaking cross-world coordinates.
-
-## Paused Contract Timer
-
-The bounty timer pauses when the target cannot reasonably be hunted:
-
-- target is offline;
-- target is inside a configured pause/safe world such as `lobby`.
-
-The pause affects both the contract deadline and the underlying escrow contribution deadline. The expiration/refund system therefore does not consume bounty time while the target is unavailable.
-
-Player join, quit, and world-change events update availability immediately, with a periodic heartbeat as a recovery fallback.
-
-## Tracking Configuration
-
-```yaml
-tracking:
-  update-seconds: 20
-  pause-scan-seconds: 5
-  pause-worlds:
-    - lobby
-
-  accuracy:
-    close-max-distance: 300
-    medium-max-distance: 1000
-    far-max-distance: 2000
-
-    close-offset: 25
-    medium-offset: 50
-    far-offset: 80
-    very-far-offset: 120
-```
-
-Add additional safe worlds to `tracking.pause-worlds` if needed.
+The active bounty timer pauses while the target is offline or inside a configured safe world such as `lobby`. Both the contract and escrow contribution deadline are extended together.
 
 ## Bounty Master Features
 
@@ -110,15 +131,8 @@ The NPC placement wizard supports:
 
 ## Admin Setup
 
-Bind the Bounty Master NPC:
-
 ```text
 /cdrbounty npc bind
-```
-
-Useful commands:
-
-```text
 /cdrbounty approval
 /cdrbounty npc info
 /cdrbounty npc unbind
@@ -130,20 +144,20 @@ Useful commands:
 
 ## Safety / Persistence
 
-- SQLite-backed contracts and tracking pause state.
-- Vault escrow and recoverable economy intents.
-- Full rejection refund for player bounty requests.
+- SQLite-backed contracts, approval, tracking pause state, and reputation escalation state.
+- Reputation-generated contribution + contract + threshold state are written in one SQLite transaction.
+- CdrReputation integration is soft-linked through Bukkit ServicesManager/reflection; CdrBounty can still start without it.
+- Vault escrow and recoverable economy intents remain authoritative for player-created bounties.
 - Per-player hunter contracts; no shared party hunting.
-- Anti-farm checks remain in the settlement path.
-- Stale tracker items are removed when the associated accepted contract is no longer active.
-- Tracker state uses contract IDs stored in item PDC rather than trusting item display text.
+- Existing anti-farm checks remain in the settlement path.
+- Stale tracker items are cleaned when the associated accepted contract is no longer active.
 
 ## Roadmap
 
 ```text
 0.3.0 ✅ Admin Approval
 0.4.0 ✅ Inaccurate Compass Tracking
-0.5.0 → Reputation Auto-Bounty
+0.5.0 ✅ Reputation Auto-Bounty
 0.6.0 → Quest Integration
 0.7.0 → Shop Price Integration
 0.9.0 → Polish / Crossplay / Anti-Abuse
@@ -158,7 +172,7 @@ See [`ROADMAP.md`](ROADMAP.md) for the focused roadmap.
 mvn clean verify
 ```
 
-CI validates the packaged JAR, tracking classes, configuration, version metadata, Citizens dependency, and confirms that player `/bounty` has not been reintroduced.
+CI validates the packaged JAR, reputation integration classes, tracking classes, configuration, version metadata, optional CdrReputation declaration, and confirms that player `/bounty` has not been reintroduced.
 
 ## License
 
