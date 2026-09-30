@@ -56,7 +56,7 @@ shop-integration:
   refresh-seconds: 3
   tiers:
     low:
-      minimum-bounty: "10000.00"
+      minimum-bounty: "100.00"
       buy-multiplier: 1.10
     medium:
       minimum-bounty: "50000.00"
