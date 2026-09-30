@@ -6,11 +6,12 @@ CdrBounty stays intentionally focused: **NPC bounty gameplay, moderation, tracki
 
 - Normal players use the Citizens Bounty Master NPC; no player `/bounty` command.
 - Player-created bounty requests require admin/owner approval before activation.
-- System-generated bounties may bypass manual approval when an integration explicitly creates them.
+- System-generated bounties may bypass manual approval when a trusted integration creates them.
 - Hunter contracts are per-player, not shared party contracts.
 - Bounty tracking is approximate, never an exact live coordinate feed.
 - Offline targets and targets in configured safe worlds such as `lobby` pause the active bounty timer.
-- Economy settlement remains escrow-backed, recoverable, and server-authoritative.
+- Reputation remains a separate system; CdrBounty reacts to reputation state instead of owning it.
+- Economy settlement remains server-authoritative and recoverable.
 
 ## Roadmap
 
@@ -22,33 +23,44 @@ CdrBounty stays intentionally focused: **NPC bounty gameplay, moderation, tracki
 | `0.2.2-beta.2` | Full NPC bounty GUI / placement wizard | ✅ |
 | `0.3.0` | Admin Approval for player bounty requests | ✅ |
 | `0.4.0` | Inaccurate Compass Tracking + paused timer | ✅ |
-| `0.5.0` | CdrReputation automatic system bounty | Next |
-| `0.6.0` | BetonQuest / CdrQuestJournal integration | Planned |
+| `0.5.0` | CdrReputation automatic system bounty | ✅ |
+| `0.6.0` | BetonQuest / CdrQuestJournal integration | Next |
 | `0.7.0` | Shop price integration for wanted players | Planned |
 | `0.9.0` | Polish, crossplay, anti-abuse, diagnostics | Planned |
 | `1.0.0` | Production stable | Planned |
 
-## v0.5.0 — Reputation Auto-Bounty
+## v0.5.0 — Reputation Auto-Bounty ✅
 
-CdrBounty will consume CdrReputation through a clean integration boundary.
+Implemented behavior:
+- runtime hook to CdrReputation through Bukkit ServicesManager and `ReputationChangeEvent`;
+- CdrReputation remains an optional soft dependency;
+- configurable negative reputation thresholds;
+- system-funded PUBLIC contracts bypass manual approval;
+- cumulative escalation when one reputation change crosses multiple thresholds;
+- persistent anti-duplicate threshold state;
+- configurable recovery/reset threshold to rearm future escalation;
+- automatic system contracts use the same Bounty Board, hunter acceptance, tracker, pause timer, anti-farm, and payout path;
+- system contribution + contract + escalation state + audit are committed atomically in SQLite;
+- future CdrReport can apply a validated reputation penalty and naturally trigger this integration.
 
-Planned behavior:
-- configurable negative-reputation thresholds;
-- automatic server-funded bounty creation when a player crosses a threshold;
-- no player approval required for a trusted system bounty;
-- one active system bounty policy configurable to avoid duplicate escalation;
-- reputation itself remains separate from bounty state;
-- future CdrReport can reduce reputation only after an admin validates a report, which can then naturally trigger this system.
+Default cumulative result:
+
+```text
+Rep <= -1000 → total automatic escalation 25k
+Rep <= -2000 → total automatic escalation 50k
+Rep <= -3500 → total automatic escalation 100k
+```
 
 ## v0.6.0 — Quest Integration
 
 Integrate with BetonQuest and CdrQuestJournal without creating another quest engine.
 
-Planned hooks include:
-- create/cancel bounty from quest actions;
+Planned hooks:
+- create/cancel a trusted system bounty from quest actions;
 - query active/completed bounty state from quest conditions;
-- allow a bounty completion to advance a quest objective;
-- preserve CdrQuestJournal safe turn-in as the quest reward authority when applicable.
+- allow bounty completion to advance a quest objective;
+- preserve CdrQuestJournal safe turn-in as quest reward authority when applicable;
+- keep player bounty placement inside the Bounty Master NPC rather than adding gameplay commands.
 
 ## v0.7.0 — Wanted Shop Price Integration
 
@@ -59,7 +71,7 @@ Core API intent:
 - active bounty total;
 - configurable BUY price multiplier.
 
-Wanted players can pay higher shop BUY prices while SELL values remain unchanged. The same multiplier must be applied to both GUI quotes and transaction validation so the displayed and charged prices cannot diverge.
+Wanted players can pay higher shop BUY prices while SELL values remain unchanged. The same multiplier must be applied to both GUI quotes and transaction validation so displayed and charged prices cannot diverge.
 
 ## v0.9.0 — Polish / Crossplay / Anti-Abuse
 
