@@ -81,7 +81,7 @@ public final class ReputationAutoBountyRepository implements AutoCloseable {
                 reputation, state.lastThreshold(), resetThreshold, rules);
 
         if (decision.reset()) {
-            upsertState(targetUuid, 0, reputation, null, now);
+            upsertState(targetUuid, 0, reputation, state.lastContractId(), now);
             return EvaluationResult.reset(reputation);
         }
         if (!decision.issue()) {
