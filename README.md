@@ -2,11 +2,11 @@
 
 > **You don't claim bounties. You hunt people.**
 
-CdrBounty is an NPC-driven bounty hunting framework for Paper servers. Normal players interact through a Citizens Bounty Master NPC, while player-created bounty requests require administrator approval before becoming active.
+CdrBounty is an NPC-driven bounty framework for Paper servers. Normal players interact through a Citizens Bounty Master NPC. Player-created bounty requests require administrator approval, and accepted hunters receive an intentionally inaccurate compass tracker.
 
 ## Current Release
 
-**CdrBounty `0.3.0 — Admin Approval`**
+**CdrBounty `0.4.0 — Inaccurate Compass Tracking`**
 
 Target: Paper 1.21.11, Java 21, Vault, Citizens, and a Vault-compatible economy provider.
 
@@ -16,76 +16,107 @@ Normal players have **no `/bounty` command**.
 
 ```text
 Citizens Bounty Master NPC
-        ↓ right click
-Bounty Master
-        ├─ Bounty Board
-        │    ├─ left click = accept
-        │    └─ right click accepted contract = abandon
-        │
-        ├─ My Contracts
-        │    └─ active contracts accepted by this player
-        │
-        └─ Pasang Bounty
-             ↓
-           Target + Amount + Options + Conditions
-             ↓
-           Confirmation
-             ↓
-           Vault escrow
-             ↓
-           PENDING_APPROVAL
-             ↓
-        Admin review
-        ├─ APPROVE → OPEN
-        └─ REJECT  → full requester refund
+        ↓
+Bounty Board
+        ↓
+Accept Contract
+        ↓
+Bounty Tracker Compass
+        ↓
+Approximate target direction
 ```
 
-Player-created bounties are not visible on the Bounty Board, cannot be accepted, and cannot be claimed while they are `PENDING_APPROVAL`.
+Accepted contracts can also be viewed through **My Contracts**. Left-click an accepted contract to reissue its tracker; right-click to abandon it.
 
-## Admin Approval
-
-Administrators with `cdrbounty.admin.approval` can open:
+## Player-Created Bounty Approval
 
 ```text
+NPC Placement Wizard
+↓
+Vault escrow
+↓
+PENDING_APPROVAL
+↓
 /cdrbounty approval
+├─ APPROVE → OPEN
+└─ REJECT  → full requester refund
 ```
 
-The GUI shows all pending requests with requester, target, reward, flags, conditions, and waiting time. Opening a request provides explicit **APPROVE** and **REJECT** actions.
+Pending requests cannot be accepted or claimed. Approval starts the active bounty timer. Rejection uses the recoverable refund pipeline.
 
-Approval starts the bounty's active timer from the approval moment. Rejection returns the requester's full gross placement amount, including the placement fee portion that would otherwise have been consumed.
+## Inaccurate Bounty Tracker
 
-The rejection refund is recovery-safe: a persistent economy intent is written before Vault is called. If the server stops after money moves but before the contract is finalized, startup recovery completes the refund and marks the request rejected.
+The compass never receives the target's exact location. CdrBounty creates a random offset around the target every tracker refresh.
 
-Funded contracts left in `DRAFT` by an interrupted submission are recovered into `PENDING_APPROVAL`, never silently opened.
+Default accuracy bands:
 
-## NPC Placement UX
+```text
+0–300 blocks      → ±25 blocks
+301–1000          → ±50 blocks
+1001–2000         → ±80 blocks
+>2000             → ±120 blocks
+```
 
-The existing NPC wizard supports:
+The approximate location is regenerated periodically, so the compass behaves like a tracking signal rather than GPS.
 
-- `PUBLIC` / `PRIVATE`
-- `EXCLUSIVE`
-- `ANONYMOUS`
-- required world
-- forbidden world
-- required weapon
-- confirmation before escrow
-- `batal` / `cancel`
-- `kembali` / `back`
-- chat-input timeout
-- resumable in-memory drafts
+If the target is in another world/dimension, the tracker reports **Signal Lost** instead of leaking cross-world coordinates.
 
-## NPC Setup
+## Paused Contract Timer
 
-1. Install Citizens, Vault, an economy provider, and CdrBounty.
-2. Create/select the Citizens NPC used as Bounty Master.
-3. Stand within 8 blocks and look directly at the NPC.
-4. Run:
+The bounty timer pauses when the target cannot reasonably be hunted:
+
+- target is offline;
+- target is inside a configured pause/safe world such as `lobby`.
+
+The pause affects both the contract deadline and the underlying escrow contribution deadline. The expiration/refund system therefore does not consume bounty time while the target is unavailable.
+
+Player join, quit, and world-change events update availability immediately, with a periodic heartbeat as a recovery fallback.
+
+## Tracking Configuration
+
+```yaml
+tracking:
+  update-seconds: 20
+  pause-scan-seconds: 5
+  pause-worlds:
+    - lobby
+
+  accuracy:
+    close-max-distance: 300
+    medium-max-distance: 1000
+    far-max-distance: 2000
+
+    close-offset: 25
+    medium-offset: 50
+    far-offset: 80
+    very-far-offset: 120
+```
+
+Add additional safe worlds to `tracking.pause-worlds` if needed.
+
+## Bounty Master Features
+
+The NPC placement wizard supports:
+
+- `PUBLIC` / `PRIVATE`;
+- `EXCLUSIVE`;
+- `ANONYMOUS`;
+- required world;
+- forbidden world;
+- required weapon;
+- confirmation before escrow;
+- chat-input timeout;
+- resumable in-memory drafts.
+
+## Admin Setup
+
+Bind the Bounty Master NPC:
 
 ```text
 /cdrbounty npc bind
 ```
 
-Useful admin commands:
+Useful commands:
 
 ```text
 /cdrbounty approval
@@ -97,15 +128,29 @@ Useful admin commands:
 /cdrbounty debug
 ```
 
-## Contract / Economy Safety
+## Safety / Persistence
 
-- Per-player hunter acceptance; no party/shared hunting.
-- Pending requests are neither accept-able nor claimable.
-- Admin approval is permission-gated.
-- Rejection performs a full recoverable refund.
-- Existing anti-farm checks remain in the death-settlement path.
-- Vault escrow, payout intents, refund handling, SQLite persistence, and crash recovery remain authoritative.
-- GUI actions call domain services; UI never bypasses validation.
+- SQLite-backed contracts and tracking pause state.
+- Vault escrow and recoverable economy intents.
+- Full rejection refund for player bounty requests.
+- Per-player hunter contracts; no shared party hunting.
+- Anti-farm checks remain in the settlement path.
+- Stale tracker items are removed when the associated accepted contract is no longer active.
+- Tracker state uses contract IDs stored in item PDC rather than trusting item display text.
+
+## Roadmap
+
+```text
+0.3.0 ✅ Admin Approval
+0.4.0 ✅ Inaccurate Compass Tracking
+0.5.0 → Reputation Auto-Bounty
+0.6.0 → Quest Integration
+0.7.0 → Shop Price Integration
+0.9.0 → Polish / Crossplay / Anti-Abuse
+1.0.0 → Production
+```
+
+See [`ROADMAP.md`](ROADMAP.md) for the focused roadmap.
 
 ## Build
 
@@ -113,19 +158,7 @@ Useful admin commands:
 mvn clean verify
 ```
 
-CI validates the packaged JAR, approval classes, Citizens dependency, version metadata, permission registration, and verifies that player `/bounty` has not been reintroduced.
-
-## Roadmap
-
-```text
-0.3.0 ✅ Admin Approval
-0.4.0 → Inaccurate Compass Tracking
-0.5.0 → Reputation Auto-Bounty
-0.6.0 → Quest Integration
-0.7.0 → Shop Price Integration
-0.9.0 → Polish / Crossplay / Anti-Abuse
-1.0.0 → Production
-```
+CI validates the packaged JAR, tracking classes, configuration, version metadata, Citizens dependency, and confirms that player `/bounty` has not been reintroduced.
 
 ## License
 
