@@ -6,11 +6,12 @@ CdrBounty stays intentionally focused: **NPC bounty gameplay, moderation, tracki
 
 - Normal players use the Citizens Bounty Master NPC; no player `/bounty` command.
 - Player-created bounty requests require admin/owner approval before activation.
-- System-generated bounties may bypass manual approval when a trusted integration creates them.
+- Trusted system/quest integrations may bypass manual approval.
 - Hunter contracts are per-player, not shared party contracts.
 - Bounty tracking is approximate, never an exact live coordinate feed.
 - Offline targets and targets in configured safe worlds such as `lobby` pause the active bounty timer.
 - Reputation remains a separate system; CdrBounty reacts to reputation state instead of owning it.
+- BetonQuest remains the quest-logic authority; CdrQuestJournal remains the journal/safe-turn-in authority.
 - Economy settlement remains server-authoritative and recoverable.
 
 ## Roadmap
@@ -24,43 +25,62 @@ CdrBounty stays intentionally focused: **NPC bounty gameplay, moderation, tracki
 | `0.3.0` | Admin Approval for player bounty requests | ✅ |
 | `0.4.0` | Inaccurate Compass Tracking + paused timer | ✅ |
 | `0.5.0` | CdrReputation automatic system bounty | ✅ |
-| `0.6.0` | BetonQuest / CdrQuestJournal integration | Next |
-| `0.7.0` | Shop price integration for wanted players | Planned |
+| `0.6.0` | BetonQuest / CdrQuestJournal integration | ✅ |
+| `0.7.0` | Shop price integration for wanted players | Next |
 | `0.9.0` | Polish, crossplay, anti-abuse, diagnostics | Planned |
 | `1.0.0` | Production stable | Planned |
 
 ## v0.5.0 — Reputation Auto-Bounty ✅
 
-Implemented behavior:
-- runtime hook to CdrReputation through Bukkit ServicesManager and `ReputationChangeEvent`;
-- CdrReputation remains an optional soft dependency;
-- configurable negative reputation thresholds;
-- system-funded PUBLIC contracts bypass manual approval;
-- cumulative escalation when one reputation change crosses multiple thresholds;
-- persistent anti-duplicate threshold state;
-- configurable recovery/reset threshold to rearm future escalation;
-- automatic system contracts use the same Bounty Board, hunter acceptance, tracker, pause timer, anti-farm, and payout path;
-- system contribution + contract + escalation state + audit are committed atomically in SQLite;
-- future CdrReport can apply a validated reputation penalty and naturally trigger this integration.
+Implemented:
+- CdrReputation event/API hook;
+- configurable negative-reputation thresholds;
+- trusted system-funded PUBLIC contracts;
+- cumulative escalation with duplicate prevention;
+- active system-contract top-up;
+- reset/rearm threshold;
+- shared tracker, pause, anti-farm, settlement, and payout pipeline.
 
-Default cumulative result:
+## v0.6.0 — Quest Integration ✅
+
+Implemented native BetonQuest 3.2.0 hooks:
 
 ```text
-Rep <= -1000 → total automatic escalation 25k
-Rep <= -2000 → total automatic escalation 50k
-Rep <= -3500 → total automatic escalation 100k
+Actions:
+cdrbounty_create <questKey> <targetNameOrUuid> <amount>
+cdrbounty_cancel <questKey>
+
+Conditions:
+cdrbounty_has <questKey>
+cdrbounty_active <questKey>
+cdrbounty_completed <questKey>
 ```
 
-## v0.6.0 — Quest Integration
+Quest contract behavior:
+- system-funded and bypasses admin approval;
+- `PRIVATE + EXCLUSIVE`;
+- allowlisted to the BetonQuest profile player;
+- automatically accepted;
+- tracker automatically issued;
+- same anti-farm, pause timer, claim, and payout systems as normal bounties;
+- duplicate create calls reuse the current active attempt;
+- terminal attempts can be followed by a new contract for repeatable quest flows;
+- persistent player + quest key bindings in SQLite;
+- atomic contract/binding creation.
 
-Integrate with BetonQuest and CdrQuestJournal without creating another quest engine.
+Recommended responsibility split:
 
-Planned hooks:
-- create/cancel a trusted system bounty from quest actions;
-- query active/completed bounty state from quest conditions;
-- allow bounty completion to advance a quest objective;
-- preserve CdrQuestJournal safe turn-in as quest reward authority when applicable;
-- keep player bounty placement inside the Bounty Master NPC rather than adding gameplay commands.
+```text
+Citizens Quest NPC
+        ↓
+BetonQuest
+  ├─ CdrQuestJournal lifecycle/progress
+  └─ CdrBounty hunt state
+        ↓
+CdrReputation / external rewards
+```
+
+A successful `cdrbounty_completed` condition can gate `cdrjournal_progress`, followed by the normal `cdrjournal_prepare → rewards → cdrjournal_finalize` safe turn-in chain.
 
 ## v0.7.0 — Wanted Shop Price Integration
 
@@ -71,7 +91,7 @@ Core API intent:
 - active bounty total;
 - configurable BUY price multiplier.
 
-Wanted players can pay higher shop BUY prices while SELL values remain unchanged. The same multiplier must be applied to both GUI quotes and transaction validation so displayed and charged prices cannot diverge.
+Wanted players can pay higher shop BUY prices while SELL values remain unchanged. The multiplier must be used by both GUI quotes and transaction validation so displayed and charged prices cannot diverge.
 
 ## v0.9.0 — Polish / Crossplay / Anti-Abuse
 
