@@ -14,6 +14,7 @@ import store.cadera.cdrbounty.claim.BountyListener;
 import store.cadera.cdrbounty.claim.ContractClaimService;
 import store.cadera.cdrbounty.command.AdminCommand;
 import store.cadera.cdrbounty.command.RootAdminCommand;
+import store.cadera.cdrbounty.config.ConfigMigrationService;
 import store.cadera.cdrbounty.config.MessageService;
 import store.cadera.cdrbounty.config.PluginSettings;
 import store.cadera.cdrbounty.contract.ContractGuiService;
@@ -22,6 +23,7 @@ import store.cadera.cdrbounty.contract.ContractService;
 import store.cadera.cdrbounty.contract.SQLiteContractRepository;
 import store.cadera.cdrbounty.core.MainThread;
 import store.cadera.cdrbounty.core.RecoveryService;
+import store.cadera.cdrbounty.diagnostic.ProductionDiagnosticsService;
 import store.cadera.cdrbounty.economy.VaultEconomyAdapter;
 import store.cadera.cdrbounty.integration.betonquest.BetonQuestBootstrap;
 import store.cadera.cdrbounty.npc.BountyNpcBindingService;
@@ -56,11 +58,18 @@ public final class CdrBountyPlugin extends JavaPlugin {
     private QuestBountyRepository questBountyRepository;
     private BountyNpcBindingService npcBinding;
     private WantedShopService wantedShopService;
+    private ProductionDiagnosticsService diagnostics;
 
     @Override
     public void onEnable() {
         try {
             installDefaultResources();
+            ConfigMigrationService.Result migration = new ConfigMigrationService(this).migrate();
+            if (migration.migrated()) {
+                getLogger().info("Config migration v" + migration.fromVersion() + " -> v" + migration.toVersion()
+                        + (migration.backupFile() == null ? "" : "; backup=" + migration.backupFile().getName()));
+            }
+
             settings = PluginSettings.load(this);
             messages = new MessageService(this);
             economy = VaultEconomyAdapter.hook(this);
@@ -97,12 +106,13 @@ public final class CdrBountyPlugin extends JavaPlugin {
             ContractGuiService gui = new ContractGuiService(this, contracts, economy, trackers);
             ApprovalAdminGui approvalGui = new ApprovalAdminGui(this, approvals, economy);
             npcBinding = new BountyNpcBindingService(this);
+            diagnostics = new ProductionDiagnosticsService(this, settings, repository, npcBinding);
             BountyPlacementWizard wizard = new BountyPlacementWizard(this, contracts, economy, this::settings);
             BountyNpcService npcService = new BountyNpcService(this, npcBinding, gui, wizard);
 
             PluginCommand admin = Objects.requireNonNull(getCommand("cdrbounty"), "cdrbounty command missing from plugin.yml");
             AdminCommand legacyAdmin = new AdminCommand(this, repository, maintenance, refunds, messages, economy, npcBinding);
-            admin.setExecutor(new RootAdminCommand(legacyAdmin, approvalGui));
+            admin.setExecutor(new RootAdminCommand(legacyAdmin, approvalGui, diagnostics));
 
             getServer().getPluginManager().registerEvents(
                     new BountyListener(this, repository, claim, messages, economy), this);
@@ -140,6 +150,7 @@ public final class CdrBountyPlugin extends JavaPlugin {
                         wantedShopService.start();
                         refunds.startExpirationTask();
                         contracts.startMaintenance();
+                        diagnostics.logStartupReport();
                         approvals.pendingCount().thenAccept(count -> {
                             if (count > 0) getLogger().info(count + " bounty request(s) waiting for admin approval.");
                         });
@@ -149,8 +160,11 @@ public final class CdrBountyPlugin extends JavaPlugin {
                         return null;
                     });
 
+            boolean floodgate = getServer().getPluginManager().getPlugin("floodgate") != null
+                    || getServer().getPluginManager().getPlugin("Floodgate") != null;
+            getLogger().info("Crossplay mode: inventory/chat NPC flow enabled; Floodgate detected=" + floodgate + ".");
             getLogger().info("CdrBounty " + getPluginMeta().getVersion()
-                    + " enabled with NPC-only access + Approval + Tracking + Reputation + Quest + Shop API + SQLite + Vault.");
+                    + " enabled with NPC-only access + Approval + Tracking + Reputation + Quest + Shop API + Production Hardening + SQLite + Vault.");
         } catch (Exception ex) {
             getLogger().severe("CdrBounty failed to start safely: " + rootMessage(ex));
             ex.printStackTrace();
@@ -174,6 +188,7 @@ public final class CdrBountyPlugin extends JavaPlugin {
 
     public void reloadRuntimeConfiguration() {
         PluginSettings previous = settings;
+        new ConfigMigrationService(this).migrate();
         PluginSettings next = PluginSettings.load(this);
         if (previous != null && (!previous.sqliteFile().equals(next.sqliteFile())
                 || previous.sqliteBusyTimeoutMs() != next.sqliteBusyTimeoutMs()
