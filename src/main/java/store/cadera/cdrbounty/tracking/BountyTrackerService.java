@@ -160,20 +160,26 @@ public final class BountyTrackerService implements Listener {
                     for (TrackingRepository.TrackingContract contract : active) byId.put(contract.contractId(), contract);
 
                     ItemStack[] contents = hunter.getInventory().getContents();
+                    Set<UUID> seen = new HashSet<>();
                     boolean changed = false;
+                    int sanitized = 0;
                     for (int slot = 0; slot < contents.length; slot++) {
                         ItemStack item = contents[slot];
                         UUID id = trackerContract(item);
                         if (id == null) continue;
                         TrackingRepository.TrackingContract contract = byId.get(id);
-                        if (contract == null) {
+                        if (contract == null || !seen.add(id)) {
                             hunter.getInventory().setItem(slot, null);
+                            sanitized++;
                         } else {
                             hunter.getInventory().setItem(slot, updateTracker(item, hunter, contract));
                         }
                         changed = true;
                     }
                     if (changed) hunter.updateInventory();
+                    if (sanitized > 0 && plugin.getConfig().getBoolean("runtime.debug", false)) {
+                        plugin.getLogger().info("Sanitized " + sanitized + " stale/duplicate tracker(s) for " + hunter.getName());
+                    }
                 }))
                 .exceptionally(ex -> {
                     plugin.getLogger().warning("Bounty tracker refresh failed for " + hunter.getName() + ": " + root(ex));
