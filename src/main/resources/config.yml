@@ -22,6 +22,20 @@ npc:
   input-timeout-seconds: 60
   click-cooldown-millis: 600
 
+tracking:
+  update-seconds: 20
+  pause-scan-seconds: 5
+  pause-worlds:
+    - lobby
+  accuracy:
+    close-max-distance: 300
+    medium-max-distance: 1000
+    far-max-distance: 2000
+    close-offset: 25
+    medium-offset: 50
+    far-offset: 80
+    very-far-offset: 120
+
 claim:
   blacklisted-worlds: []
   killer-victim-cooldown-seconds: 3600
