@@ -3,11 +3,15 @@ package store.cadera.cdrbounty;
 import org.bukkit.command.PluginCommand;
 import org.bukkit.plugin.java.JavaPlugin;
 import store.cadera.cdrbounty.antifarm.AntiFarmService;
+import store.cadera.cdrbounty.approval.ApprovalAdminGui;
+import store.cadera.cdrbounty.approval.ApprovalRepository;
+import store.cadera.cdrbounty.approval.BountyApprovalService;
 import store.cadera.cdrbounty.bounty.BountyPlacementService;
 import store.cadera.cdrbounty.bounty.BountyRefundService;
 import store.cadera.cdrbounty.claim.BountyListener;
 import store.cadera.cdrbounty.claim.ContractClaimService;
 import store.cadera.cdrbounty.command.AdminCommand;
+import store.cadera.cdrbounty.command.RootAdminCommand;
 import store.cadera.cdrbounty.config.MessageService;
 import store.cadera.cdrbounty.config.PluginSettings;
 import store.cadera.cdrbounty.contract.ContractGuiService;
@@ -36,6 +40,7 @@ public final class CdrBountyPlugin extends JavaPlugin {
     private BountyRepository repository;
     private BountyMaintenanceRepository maintenance;
     private ContractRepository contractRepository;
+    private ApprovalRepository approvalRepository;
     private BountyNpcBindingService npcBinding;
 
     @Override
@@ -52,36 +57,48 @@ public final class CdrBountyPlugin extends JavaPlugin {
             maintenance.initialize();
             contractRepository = new SQLiteContractRepository(settings);
             contractRepository.initialize();
+            approvalRepository = new ApprovalRepository(settings);
+            approvalRepository.initialize();
 
             AntiFarmService antiFarm = new AntiFarmService(repository, maintenance, this::settings);
             BountyPlacementService placement = new BountyPlacementService(this, repository, economy, this::settings);
             BountyRefundService refunds = new BountyRefundService(this, maintenance, economy, this::settings);
-            ContractService contracts = new ContractService(this, contractRepository, placement, this::settings);
+            BountyApprovalService approvals = new BountyApprovalService(
+                    this, approvalRepository, maintenance, economy, this::settings);
+            ContractService contracts = new ContractService(
+                    this, contractRepository, placement, approvals, this::settings);
             ContractClaimService claim = new ContractClaimService(
                     this, repository, contractRepository, economy, antiFarm, this::settings);
             ContractGuiService gui = new ContractGuiService(this, contracts, economy);
+            ApprovalAdminGui approvalGui = new ApprovalAdminGui(this, approvals, economy);
             npcBinding = new BountyNpcBindingService(this);
             BountyPlacementWizard wizard = new BountyPlacementWizard(this, contracts, economy, this::settings);
             BountyNpcService npcService = new BountyNpcService(this, npcBinding, gui, wizard);
 
             PluginCommand admin = Objects.requireNonNull(getCommand("cdrbounty"), "cdrbounty command missing from plugin.yml");
-            admin.setExecutor(new AdminCommand(this, repository, maintenance, refunds, messages, economy, npcBinding));
+            AdminCommand legacyAdmin = new AdminCommand(this, repository, maintenance, refunds, messages, economy, npcBinding);
+            admin.setExecutor(new RootAdminCommand(legacyAdmin, approvalGui));
 
             getServer().getPluginManager().registerEvents(
                     new BountyListener(this, repository, claim, messages, economy), this);
             getServer().getPluginManager().registerEvents(gui, this);
             getServer().getPluginManager().registerEvents(wizard, this);
             getServer().getPluginManager().registerEvents(npcService, this);
+            getServer().getPluginManager().registerEvents(approvalGui, this);
 
             new RecoveryService(this, repository, maintenance, economy, this::settings)
                     .recover()
+                    .thenCompose(ignored -> approvals.reconcile())
                     .thenCompose(ignored -> contractRepository.reconcile())
                     .thenCompose(reconciled -> contractRepository.syncTerminalStates(Instant.now()))
                     .thenRun(() -> MainThread.run(this, () -> {
-                        getLogger().info("Economy + contract recovery scan completed.");
+                        getLogger().info("Economy + approval + contract recovery scan completed.");
                         refunds.startExpirationTask();
                         refunds.scanExpired();
                         contracts.startMaintenance();
+                        approvals.pendingCount().thenAccept(count -> {
+                            if (count > 0) getLogger().info(count + " bounty request(s) waiting for admin approval.");
+                        });
                     }))
                     .exceptionally(ex -> {
                         getLogger().severe("Recovery scan failed; maintenance was not started: " + rootMessage(ex));
@@ -89,7 +106,7 @@ public final class CdrBountyPlugin extends JavaPlugin {
                     });
 
             getLogger().info("CdrBounty " + getPluginMeta().getVersion()
-                    + " enabled with NPC-only player access + SQLite + Vault + Contract Engine.");
+                    + " enabled with NPC-only player access + Admin Approval + SQLite + Vault.");
         } catch (Exception ex) {
             getLogger().severe("CdrBounty failed to start safely: " + rootMessage(ex));
             ex.printStackTrace();
@@ -99,6 +116,7 @@ public final class CdrBountyPlugin extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        if (approvalRepository != null) approvalRepository.close();
         if (contractRepository != null) contractRepository.close();
         if (maintenance != null) maintenance.close();
         if (repository != null) repository.close();
