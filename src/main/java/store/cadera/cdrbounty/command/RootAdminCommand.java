@@ -37,7 +37,7 @@ public final class RootAdminCommand implements CommandExecutor {
             return true;
         }
         if (args.length > 0 && (args[0].equalsIgnoreCase("diagnose") || args[0].equalsIgnoreCase("health"))) {
-            if (!sender.hasPermission("cdrbounty.admin.debug")) {
+            if (!sender.hasPermission("cdrbounty.admin.diagnose")) {
                 sender.sendMessage("§cKamu tidak punya izin menjalankan diagnostics.");
                 return true;
             }
@@ -75,7 +75,7 @@ public final class RootAdminCommand implements CommandExecutor {
             if (sender.hasPermission("cdrbounty.admin.approval")) {
                 sender.sendMessage("§e/cdrbounty approval §7- buka pending bounty approval GUI");
             }
-            if (sender.hasPermission("cdrbounty.admin.debug")) {
+            if (sender.hasPermission("cdrbounty.admin.diagnose")) {
                 sender.sendMessage("§e/cdrbounty diagnose §7- cek SQLite, orphan data, economy recovery, NPC, dan integrasi");
             }
         }
