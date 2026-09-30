@@ -3,6 +3,7 @@ package store.cadera.cdrbounty.contract;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
+import store.cadera.cdrbounty.approval.BountyApprovalService;
 import store.cadera.cdrbounty.bounty.BountyPlacementService;
 import store.cadera.cdrbounty.config.PluginSettings;
 import store.cadera.cdrbounty.economy.MoneyMath;
@@ -19,13 +20,15 @@ public final class ContractService {
     private final JavaPlugin plugin;
     private final ContractRepository repository;
     private final BountyPlacementService placement;
+    private final BountyApprovalService approvals;
     private final Supplier<PluginSettings> settings;
 
     public ContractService(JavaPlugin plugin, ContractRepository repository, BountyPlacementService placement,
-                           Supplier<PluginSettings> settings) {
+                           BountyApprovalService approvals, Supplier<PluginSettings> settings) {
         this.plugin = plugin;
         this.repository = repository;
         this.placement = placement;
+        this.approvals = approvals;
         this.settings = settings;
     }
 
@@ -88,15 +91,15 @@ public final class ContractService {
                         return repository.voidDraft(contractId, result.reason())
                                 .handle((ignored, error) -> CreateResult.fail(result.reason()));
                     }
-                    Instant activatedAt = Instant.now();
-                    return repository.open(contractId, result.rewardAmount(), activatedAt)
+                    return approvals.submit(contractId, result.rewardAmount())
                             .handle((ignored, error) -> {
                                 if (error != null) {
                                     plugin.getLogger().warning("Contract " + contractId
-                                            + " funded but OPEN persistence is pending recovery: " + rootMessage(error));
+                                            + " funded but approval submission is pending recovery: " + rootMessage(error));
                                     return CreateResult.recoveryPending(contractId, result.rewardAmount());
                                 }
-                                return CreateResult.ok(contractId, result.rewardAmount());
+                                issuer.sendMessage("§eRequest bounty sudah dikirim ke admin dan menunggu persetujuan.");
+                                return CreateResult.pending(contractId, result.rewardAmount());
                             });
                 });
     }
@@ -131,6 +134,7 @@ public final class ContractService {
         long ticks = Math.max(20L, settings.get().contractSyncSeconds() * 20L);
         plugin.getServer().getScheduler().runTaskTimer(plugin, () ->
                 repository.syncTerminalStates(Instant.now())
+                        .thenCompose(ignored -> approvals.reconcile())
                         .thenCompose(ignored -> repository.reconcile())
                         .exceptionally(ex -> {
                             plugin.getLogger().warning("Contract maintenance failed: " + rootMessage(ex));
@@ -145,9 +149,11 @@ public final class ContractService {
     }
 
     public record CreateResult(boolean success, String reason, UUID contractId, BigDecimal rewardAmount) {
-        public static CreateResult ok(UUID id, BigDecimal amount) { return new CreateResult(true, "OK", id, amount); }
+        public static CreateResult pending(UUID id, BigDecimal amount) {
+            return new CreateResult(true, "PENDING_APPROVAL", id, amount);
+        }
         public static CreateResult recoveryPending(UUID id, BigDecimal amount) {
-            return new CreateResult(true, "OPEN_RECOVERY_PENDING", id, amount);
+            return new CreateResult(true, "APPROVAL_RECOVERY_PENDING", id, amount);
         }
         public static CreateResult fail(String reason) { return new CreateResult(false, reason, null, BigDecimal.ZERO); }
     }
