@@ -1,30 +1,18 @@
 name: CdrBounty
-version: 0.2.0-beta.2
+version: 0.2.1-beta.2
 main: store.cadera.cdrbounty.CdrBountyPlugin
 api-version: '1.21'
 author: CADERA
-description: Living bounty contract and hunter framework for Paper 1.21.11.
-depend: [Vault]
+description: NPC-driven bounty contract and hunter framework for Paper 1.21.11.
+depend: [Vault, Citizens]
 
 commands:
-  bounty:
-    description: Main CdrBounty player command.
-    usage: /bounty <add|view|list|hunt|contracts|create|accept|abandon>
-    permission: cdrbounty.use
   cdrbounty:
     description: CdrBounty administration command.
-    usage: /cdrbounty <reload|add|remove|inspect|history|debug>
+    usage: /cdrbounty <reload|add|remove|inspect|history|debug|npc>
     permission: cdrbounty.admin
 
 permissions:
-  cdrbounty.use:
-    default: true
-  cdrbounty.add:
-    default: true
-  cdrbounty.view:
-    default: true
-  cdrbounty.list:
-    default: true
   cdrbounty.contract.create:
     default: true
   cdrbounty.contract.accept:
@@ -45,6 +33,7 @@ permissions:
       cdrbounty.admin.inspect: true
       cdrbounty.admin.debug: true
       cdrbounty.admin.contracts: true
+      cdrbounty.admin.npc: true
   cdrbounty.admin.reload:
     default: op
   cdrbounty.admin.modify:
@@ -54,6 +43,8 @@ permissions:
   cdrbounty.admin.debug:
     default: op
   cdrbounty.admin.contracts:
+    default: op
+  cdrbounty.admin.npc:
     default: op
   cdrbounty.bypass.antifarm:
     default: op

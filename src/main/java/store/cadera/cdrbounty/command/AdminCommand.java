@@ -13,6 +13,7 @@ import store.cadera.cdrbounty.config.MessageService;
 import store.cadera.cdrbounty.core.MainThread;
 import store.cadera.cdrbounty.economy.MoneyMath;
 import store.cadera.cdrbounty.economy.VaultEconomyAdapter;
+import store.cadera.cdrbounty.npc.BountyNpcBindingService;
 import store.cadera.cdrbounty.storage.BountyMaintenanceRepository;
 import store.cadera.cdrbounty.storage.BountyRepository;
 
@@ -27,16 +28,19 @@ public final class AdminCommand implements CommandExecutor {
     private final BountyRefundService refunds;
     private final MessageService messages;
     private final VaultEconomyAdapter economy;
+    private final BountyNpcBindingService npcBinding;
 
     public AdminCommand(CdrBountyPlugin plugin, BountyRepository repository,
                         BountyMaintenanceRepository maintenance, BountyRefundService refunds,
-                        MessageService messages, VaultEconomyAdapter economy) {
+                        MessageService messages, VaultEconomyAdapter economy,
+                        BountyNpcBindingService npcBinding) {
         this.plugin = plugin;
         this.repository = repository;
         this.maintenance = maintenance;
         this.refunds = refunds;
         this.messages = messages;
         this.economy = economy;
+        this.npcBinding = npcBinding;
     }
 
     @Override
@@ -47,7 +51,7 @@ public final class AdminCommand implements CommandExecutor {
             return true;
         }
         if (args.length == 0) {
-            sender.sendMessage("§6CdrBounty Admin §7— reload, add, remove, inspect, history, debug");
+            sender.sendMessage("§6CdrBounty Admin §7— reload, add, remove, inspect, history, debug, npc");
             return true;
         }
 
@@ -58,8 +62,45 @@ public final class AdminCommand implements CommandExecutor {
             case "inspect" -> inspect(sender, args);
             case "history" -> history(sender, args);
             case "debug" -> debug(sender);
+            case "npc" -> npc(sender, args);
             default -> {
-                sender.sendMessage("§cUsage: /cdrbounty <reload|add|remove|inspect|history|debug>");
+                sender.sendMessage("§cUsage: /cdrbounty <reload|add|remove|inspect|history|debug|npc>");
+                yield true;
+            }
+        };
+    }
+
+    private boolean npc(CommandSender sender, String[] args) {
+        if (!sender.hasPermission("cdrbounty.admin.npc")) return denied(sender);
+        if (args.length < 2) {
+            sender.sendMessage("§e/cdrbounty npc bind §7- bind NPC yang sedang dilihat");
+            sender.sendMessage("§e/cdrbounty npc info §7- lihat binding Bounty Master");
+            sender.sendMessage("§e/cdrbounty npc unbind §7- hapus binding");
+            return true;
+        }
+        return switch (args[1].toLowerCase()) {
+            case "bind" -> {
+                if (!(sender instanceof Player player)) {
+                    sender.sendMessage(messages.text("player-only"));
+                    yield true;
+                }
+                BountyNpcBindingService.BindResult result = npcBinding.bindLookedAt(player);
+                if (!result.success()) sender.sendMessage("§cBind gagal: §7" + result.reason());
+                else sender.sendMessage("§aBounty Master di-bind ke NPC §e" + result.npcName()
+                        + " §8(ID " + result.npcId() + ")");
+                yield true;
+            }
+            case "info" -> {
+                sender.sendMessage("§6CdrBounty NPC §8— §7" + npcBinding.info());
+                yield true;
+            }
+            case "unbind" -> {
+                npcBinding.unbind();
+                sender.sendMessage("§aBinding Bounty Master dihapus.");
+                yield true;
+            }
+            default -> {
+                sender.sendMessage("§cUsage: /cdrbounty npc <bind|info|unbind>");
                 yield true;
             }
         };
@@ -126,8 +167,7 @@ public final class AdminCommand implements CommandExecutor {
     private boolean remove(CommandSender sender, String[] args) {
         if (!sender.hasPermission("cdrbounty.admin.modify")) return denied(sender);
         if (args.length < 3 || !args[2].equalsIgnoreCase("all")) {
-            sender.sendMessage("§cUsage beta.1: /cdrbounty remove <player> all");
-            sender.sendMessage("§7Partial amount removal disimpan untuk patch beta.1 berikutnya agar ownership/refund tidak rusak.");
+            sender.sendMessage("§cUsage: /cdrbounty remove <player> all");
             return true;
         }
         OfflinePlayer target = Bukkit.getOfflinePlayer(args[1]);
@@ -199,6 +239,7 @@ public final class AdminCommand implements CommandExecutor {
             sender.sendMessage("§7SQLite: §f" + plugin.settings().sqliteFile());
             sender.sendMessage("§7Unresolved economy operations: §e" + operations.size());
             sender.sendMessage("§7Debug mode: §f" + plugin.settings().debug());
+            sender.sendMessage("§7NPC: §f" + npcBinding.info());
         }));
         return true;
     }

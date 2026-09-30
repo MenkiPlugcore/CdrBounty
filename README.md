@@ -2,92 +2,68 @@
 
 > **You don't claim bounties. You hunt people.**
 
-CdrBounty is a gameplay-first bounty hunting framework for Paper servers. It keeps the beta.1 escrow/recovery core and layers structured per-player hunting contracts on top of it.
+CdrBounty is an NPC-driven bounty hunting framework for Paper servers. The beta.1 escrow/recovery core and beta.2 structured contract engine remain intact, but normal players no longer use bounty commands.
 
 ## Current Release
 
-**CdrBounty `0.2.0-beta.2 — Contract Engine`**
+**CdrBounty `0.2.1-beta.2 — NPC-Only Access`**
 
-Target: Paper 1.21.11, Java 21, Vault + a Vault-compatible economy provider.
+Target: Paper 1.21.11, Java 21, Vault, Citizens, and a Vault-compatible economy provider.
 
-### Contract Engine
+## Player Flow
 
-- Persistent contract UUID linked to the existing beta.1 escrow contribution.
-- `PUBLIC`, `PRIVATE`, `EXCLUSIVE`, and `ANONYMOUS` contract flags.
-- Lifecycle: `DRAFT -> OPEN/RESERVED -> CLAIMING -> COMPLETED`, with expiry/cancel/void recovery states.
-- Per-player accept and abandon state; party/shared hunting is not used.
-- Private hunter allowlists.
-- Exclusive contracts reserve one hunter slot.
-- Configurable max active contracts per hunter and reservation limit.
-- Serializable conditions:
-  - required world
-  - forbidden world
-  - required weapon/material
-- Contract browser GUI via `/bounty hunt`.
-- Visibility-safe `/bounty view` and `/bounty list`; private contract value is not leaked to unrelated players.
-- Death settlement selects only legacy public bounty value plus structured contracts actually accepted by that hunter and whose conditions pass.
-- Existing beta.1 anti-farm checks still run before payout.
-- Existing beta.1 `claims` + `economy_operations` remain the payout source of truth, preserving crash recovery and double-settlement protection.
-- Contract reconciliation completes/reopens state after restart based on the recovered beta.1 claim result.
-- Contract history/audit persistence.
-
-Vault currency is the supported beta.2 reward provider. Item/command/XP reward providers are intentionally deferred until the integration/API milestone so they can have explicit idempotency contracts rather than unsafe console-command retries.
-
-## Player Commands
+Normal players have no `/bounty` command.
 
 ```text
-/bounty add <player> <amount>
-/bounty view <player>
-/bounty list
-
-/bounty hunt
-/bounty contracts
-/bounty create <player> <amount> [options...]
-/bounty accept <contractUuid>
-/bounty abandon <contractUuid>
+Citizens Bounty Master NPC
+        ↓ right click
+Bounty Master Menu
+        ├─ Bounty Board
+        │    └─ left click contract = accept
+        │       right click contract = abandon
+        │
+        └─ Pasang Bounty
+             └─ input target in chat
+                input amount in chat
+                → PUBLIC contract created
 ```
 
-Create options:
+The placement chat wizard cancels its input from public chat. Type `batal` to cancel the wizard.
+
+This interaction model avoids long commands and contract UUID typing, and is suitable for Java + Bedrock/Geyser players.
+
+## NPC Setup
+
+1. Install Citizens, Vault, an economy provider, and CdrBounty.
+2. Create/select the Citizens NPC you want to use as the Bounty Master.
+3. Stand within 8 blocks and look directly at the NPC.
+4. Run:
 
 ```text
-public
-private:Hunter1,Hunter2
-anonymous
-exclusive
-world:<world>
-forbidworld:<world>
-weapon:<MATERIAL>
+/cdrbounty npc bind
 ```
 
-Example:
+Useful admin commands:
 
 ```text
-/bounty create Bandit123 25000 exclusive anonymous world:worldrp weapon:DIAMOND_SWORD
-```
-
-## Administration
-
-The beta.1 admin tools remain available:
-
-```text
+/cdrbounty npc info
+/cdrbounty npc unbind
 /cdrbounty reload
-/cdrbounty add <player> <amount>
-/cdrbounty remove <player> all
 /cdrbounty inspect <player>
 /cdrbounty history <player>
 /cdrbounty debug
 ```
 
-## Configuration
+The binding is persisted in `plugins/CdrBounty/npc.yml` using Citizens NPC UUID + ID.
 
-```yaml
-contract:
-  max-active-per-hunter: 3
-  public-reservation-limit: 8
-  sync-seconds: 30
-```
+## Contract Engine
 
-Contract duration currently follows `placement.duration-seconds`, so escrow contribution and contract expiry stay aligned.
+- `PUBLIC`, `PRIVATE`, `EXCLUSIVE`, `ANONYMOUS` contract flags remain supported by the domain layer.
+- Per-player hunter acceptance; no party/shared quest behavior.
+- Private allowlists and exclusive reservation limits remain supported.
+- Required-world, forbidden-world, and required-weapon conditions remain supported.
+- Existing anti-farm, Vault escrow, payout intents, refund, SQLite persistence, and crash recovery remain unchanged.
+- `0.2.1-beta.2` exposes the normal NPC placement wizard as PUBLIC contracts. More advanced contract creation controls can be surfaced through later NPC GUI expansion without restoring player commands.
 
 ## Build
 
@@ -95,11 +71,9 @@ Contract duration currently follows `placement.duration-seconds`, so escrow cont
 mvn clean verify
 ```
 
-The GitHub Actions build also validates that the packaged JAR contains the Contract Engine and settlement classes.
-
 ## Roadmap
 
-Next milestone after beta.2 is `v0.3.0 — Hunter System`.
+After the NPC-only access patch, the next major milestone remains `v0.3.0 — Hunter System`.
 
 See [`ROADMAP.md`](ROADMAP.md) and [`docs/roadmap/`](docs/roadmap/).
 
