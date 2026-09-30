@@ -19,6 +19,7 @@ import store.cadera.cdrbounty.core.RecoveryService;
 import store.cadera.cdrbounty.economy.VaultEconomyAdapter;
 import store.cadera.cdrbounty.npc.BountyNpcBindingService;
 import store.cadera.cdrbounty.npc.BountyNpcService;
+import store.cadera.cdrbounty.npc.BountyPlacementWizard;
 import store.cadera.cdrbounty.storage.BountyMaintenanceRepository;
 import store.cadera.cdrbounty.storage.BountyRepository;
 import store.cadera.cdrbounty.storage.SQLiteBountyRepository;
@@ -60,7 +61,8 @@ public final class CdrBountyPlugin extends JavaPlugin {
                     this, repository, contractRepository, economy, antiFarm, this::settings);
             ContractGuiService gui = new ContractGuiService(this, contracts, economy);
             npcBinding = new BountyNpcBindingService(this);
-            BountyNpcService npcService = new BountyNpcService(this, npcBinding, gui, contracts, economy);
+            BountyPlacementWizard wizard = new BountyPlacementWizard(this, contracts, economy, this::settings);
+            BountyNpcService npcService = new BountyNpcService(this, npcBinding, gui, wizard);
 
             PluginCommand admin = Objects.requireNonNull(getCommand("cdrbounty"), "cdrbounty command missing from plugin.yml");
             admin.setExecutor(new AdminCommand(this, repository, maintenance, refunds, messages, economy, npcBinding));
@@ -68,6 +70,7 @@ public final class CdrBountyPlugin extends JavaPlugin {
             getServer().getPluginManager().registerEvents(
                     new BountyListener(this, repository, claim, messages, economy), this);
             getServer().getPluginManager().registerEvents(gui, this);
+            getServer().getPluginManager().registerEvents(wizard, this);
             getServer().getPluginManager().registerEvents(npcService, this);
 
             new RecoveryService(this, repository, maintenance, economy, this::settings)
