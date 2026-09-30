@@ -56,6 +56,8 @@ Maximum cumulative automatic escalation: 100,000
 
 A large reputation drop can cross several thresholds at once. For example, moving directly to `-2500` creates a `50,000` system bounty rather than requiring two separate reputation events.
 
+If a player's existing SYSTEM bounty is still `OPEN` or `RESERVED`, later reputation escalation tops up that same contract instead of creating another duplicate card on the Bounty Board. The system contract deadline is refreshed when necessary. A new SYSTEM contract is created only when the previously tracked system bounty is no longer active.
+
 System bounties:
 
 - are funded by the server/system rather than a player's Vault balance;
@@ -146,6 +148,7 @@ The NPC placement wizard supports:
 
 - SQLite-backed contracts, approval, tracking pause state, and reputation escalation state.
 - Reputation-generated contribution + contract + threshold state are written in one SQLite transaction.
+- Active SYSTEM bounty escalation updates contribution, contract reward, threshold state, history, and audit atomically.
 - CdrReputation integration is soft-linked through Bukkit ServicesManager/reflection; CdrBounty can still start without it.
 - Vault escrow and recoverable economy intents remain authoritative for player-created bounties.
 - Per-player hunter contracts; no shared party hunting.
