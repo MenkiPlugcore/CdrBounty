@@ -16,6 +16,7 @@ import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.java.JavaPlugin;
 import store.cadera.cdrbounty.core.MainThread;
 import store.cadera.cdrbounty.economy.VaultEconomyAdapter;
+import store.cadera.cdrbounty.tracking.BountyTrackerService;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -31,13 +32,16 @@ public final class ContractGuiService implements Listener {
     private final JavaPlugin plugin;
     private final ContractService contracts;
     private final VaultEconomyAdapter economy;
+    private final BountyTrackerService trackers;
     private final NamespacedKey contractKey;
     private final NamespacedKey acceptedKey;
 
-    public ContractGuiService(JavaPlugin plugin, ContractService contracts, VaultEconomyAdapter economy) {
+    public ContractGuiService(JavaPlugin plugin, ContractService contracts, VaultEconomyAdapter economy,
+                              BountyTrackerService trackers) {
         this.plugin = plugin;
         this.contracts = contracts;
         this.economy = economy;
+        this.trackers = trackers;
         this.contractKey = new NamespacedKey(plugin, "contract_id");
         this.acceptedKey = new NamespacedKey(plugin, "contract_accepted");
     }
@@ -83,8 +87,10 @@ public final class ContractGuiService implements Listener {
         inventory.setItem(49, simple(mineOnly ? Material.WRITABLE_BOOK : Material.COMPASS,
                 mineOnly ? ChatColor.AQUA + "My Contracts" : ChatColor.GOLD + "Bounty Board",
                 mineOnly
-                        ? List.of(ChatColor.GRAY + "Right click = abandon contract.", ChatColor.DARK_GRAY + "Progress tetap per-player.")
-                        : List.of(ChatColor.GRAY + "Left click = accept.", ChatColor.GRAY + "Right click = abandon jika accepted.")));
+                        ? List.of(ChatColor.GRAY + "Left click = ambil ulang tracker.",
+                                  ChatColor.GRAY + "Right click = abandon contract.")
+                        : List.of(ChatColor.GRAY + "Left click = accept.",
+                                  ChatColor.GRAY + "Accepted: left = tracker, right = abandon.")));
         inventory.setItem(53, action(Material.CLOCK, "refresh", ChatColor.GREEN + "Refresh",
                 List.of(ChatColor.GRAY + "Muat ulang daftar.")));
         player.openInventory(inventory);
@@ -92,7 +98,7 @@ public final class ContractGuiService implements Listener {
 
     private ItemStack item(ContractRepository.ContractView view, boolean mineOnly) {
         BountyContract contract = view.contract();
-        ItemStack item = new ItemStack(view.viewerAccepted() ? Material.WRITABLE_BOOK : Material.PAPER);
+        ItemStack item = new ItemStack(view.viewerAccepted() ? Material.COMPASS : Material.PAPER);
         ItemMeta meta = item.getItemMeta();
         OfflinePlayer target = Bukkit.getOfflinePlayer(contract.targetUuid());
         meta.setDisplayName(ChatColor.GOLD + "Target: " + ChatColor.WHITE + safeName(target));
@@ -118,6 +124,7 @@ public final class ContractGuiService implements Listener {
         lore.add("");
         if (view.viewerAccepted()) {
             lore.add(ChatColor.GREEN + "ACCEPTED");
+            lore.add(ChatColor.GOLD + "Left click untuk ambil ulang Bounty Tracker.");
             lore.add(ChatColor.RED + "Right click untuk abandon.");
         } else if (!mineOnly) {
             lore.add(ChatColor.GREEN + "Left click untuk accept.");
@@ -152,11 +159,13 @@ public final class ContractGuiService implements Listener {
         boolean mine = MY_TITLE.equals(title);
 
         if (accepted) {
-            if (!event.isRightClick()) {
-                player.sendMessage(ChatColor.GRAY + "Right click untuk abandon contract.");
+            if (event.isLeftClick()) {
+                trackers.issue(player, contractId);
                 return;
             }
+            if (!event.isRightClick()) return;
             contracts.abandon(player, contractId).thenAccept(result -> MainThread.run(plugin, () -> {
+                if (result.success()) trackers.removeContract(player, contractId);
                 player.sendMessage(result.success() ? ChatColor.YELLOW + "Contract ditinggalkan."
                         : ChatColor.RED + "Tidak dapat abandon: " + result.reason());
                 load(player, mine);
@@ -165,7 +174,8 @@ public final class ContractGuiService implements Listener {
         }
         if (mine || !event.isLeftClick()) return;
         contracts.accept(player, contractId).thenAccept(result -> MainThread.run(plugin, () -> {
-            player.sendMessage(result.success() ? ChatColor.GREEN + "Contract diterima."
+            if (result.success()) trackers.issue(player, contractId);
+            player.sendMessage(result.success() ? ChatColor.GREEN + "Contract diterima. Tracker sedang disiapkan."
                     : ChatColor.RED + "Contract ditolak: " + result.reason());
             load(player, false);
         })).exceptionally(ex -> failure(player, ex));
