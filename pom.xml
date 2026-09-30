@@ -5,7 +5,7 @@
 
   <groupId>store.cadera</groupId>
   <artifactId>CdrBounty</artifactId>
-  <version>0.2.1-beta.2</version>
+  <version>0.2.2-beta.2</version>
   <name>CdrBounty</name>
   <description>NPC-driven bounty contract and hunter framework for Paper servers.</description>
 
