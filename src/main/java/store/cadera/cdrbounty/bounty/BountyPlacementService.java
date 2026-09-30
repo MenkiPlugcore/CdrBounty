@@ -12,6 +12,7 @@ import store.cadera.cdrbounty.storage.BountyRepository;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Supplier;
@@ -31,12 +32,19 @@ public final class BountyPlacementService {
     }
 
     public CompletableFuture<Result> place(Player issuer, OfflinePlayer target, BigDecimal rawAmount) {
+        return placeWithContributionId(issuer, target, rawAmount, UUID.randomUUID());
+    }
+
+    public CompletableFuture<Result> placeWithContributionId(Player issuer, OfflinePlayer target,
+                                                              BigDecimal rawAmount, UUID contributionId) {
+        Objects.requireNonNull(contributionId, "contributionId");
         return MainThread.call(plugin, () -> validateInitial(issuer, target, rawAmount))
                 .thenCompose(initial -> {
                     if (!initial.success()) return CompletableFuture.completedFuture(initial);
                     Instant now = Instant.now();
                     return repository.activeTotal(target.getUniqueId(), now)
-                            .thenCompose(active -> MainThread.call(plugin, () -> prepare(issuer, target, rawAmount, active, now)))
+                            .thenCompose(active -> MainThread.call(plugin,
+                                    () -> prepare(issuer, target, rawAmount, active, now, contributionId)))
                             .thenCompose(preparation -> {
                                 if (preparation.failure() != null) {
                                     return CompletableFuture.completedFuture(preparation.failure());
@@ -45,7 +53,8 @@ public final class BountyPlacementService {
                                 return repository.createPendingPlacement(
                                                 pending.contribution(), pending.operationId(), pending.balanceBefore())
                                         .thenCompose(ignored -> MainThread.call(plugin, () -> {
-                                            VaultEconomyAdapter.Result withdrawal = economy.withdraw(issuer, pending.contribution().grossAmount());
+                                            VaultEconomyAdapter.Result withdrawal = economy.withdraw(
+                                                    issuer, pending.contribution().grossAmount());
                                             BigDecimal after = normalize(economy.balance(issuer));
                                             return new Withdrawal(withdrawal, after);
                                         }))
@@ -61,7 +70,9 @@ public final class BountyPlacementService {
                                                             pending.contribution().id(),
                                                             pending.operationId(),
                                                             withdrawal.balanceAfter())
-                                                    .thenApply(ignored -> Result.success(pending.contribution().escrowAmount()));
+                                                    .thenApply(ignored -> Result.success(
+                                                            pending.contribution().escrowAmount(),
+                                                            pending.contribution().id()));
                                         });
                             });
                 });
@@ -86,10 +97,11 @@ public final class BountyPlacementService {
         if (amount.compareTo(cfg.minimumBounty()) < 0 || amount.compareTo(cfg.maximumBounty()) > 0) {
             return Result.fail("AMOUNT_OUT_OF_RANGE");
         }
-        return Result.success(BigDecimal.ZERO);
+        return Result.preflight();
     }
 
-    private Preparation prepare(Player issuer, OfflinePlayer target, BigDecimal rawAmount, BigDecimal active, Instant now) {
+    private Preparation prepare(Player issuer, OfflinePlayer target, BigDecimal rawAmount, BigDecimal active,
+                                Instant now, UUID contributionId) {
         PluginSettings cfg = settings.get();
         BigDecimal gross = normalize(rawAmount);
         BigDecimal fee = MoneyMath.fee(gross, cfg.placementFeePercent(), cfg.decimalScale());
@@ -106,19 +118,13 @@ public final class BountyPlacementService {
         }
 
         BigDecimal balanceBefore = normalize(economy.balance(issuer));
-        UUID contributionId = UUID.randomUUID();
         UUID operationId = UUID.randomUUID();
         BountyContribution contribution = new BountyContribution(
                 contributionId,
-                target.getUniqueId(),
-                issuer.getUniqueId(),
-                gross,
-                escrow,
-                fee,
+                target.getUniqueId(), issuer.getUniqueId(),
+                gross, escrow, fee,
                 BountyState.PENDING,
-                now,
-                now.plusSeconds(cfg.durationSeconds()),
-                null
+                now, now.plusSeconds(cfg.durationSeconds()), null
         );
         return Preparation.ready(new Pending(contribution, operationId, balanceBefore));
     }
@@ -127,13 +133,13 @@ public final class BountyPlacementService {
         return MoneyMath.normalize(value, settings.get().decimalScale());
     }
 
-    public record Result(boolean success, String reason, BigDecimal rewardAmount) {
-        public static Result success(BigDecimal amount) {
-            return new Result(true, "OK", amount);
+    public record Result(boolean success, String reason, BigDecimal rewardAmount, UUID contributionId) {
+        public static Result preflight() { return new Result(true, "OK", BigDecimal.ZERO, null); }
+        public static Result success(BigDecimal amount, UUID contributionId) {
+            return new Result(true, "OK", amount, contributionId);
         }
-
         public static Result fail(String reason) {
-            return new Result(false, reason, BigDecimal.ZERO);
+            return new Result(false, reason, BigDecimal.ZERO, null);
         }
     }
 

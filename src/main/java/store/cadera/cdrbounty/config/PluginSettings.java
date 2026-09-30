@@ -32,6 +32,9 @@ public record PluginSettings(
         RefundPolicy expireRefundPolicy,
         RefundPolicy cancelRefundPolicy,
         long expirationScanSeconds,
+        int maxActiveContractsPerHunter,
+        int publicReservationLimit,
+        long contractSyncSeconds,
         boolean debug,
         Path sqliteFile,
         int sqliteBusyTimeoutMs,
@@ -65,8 +68,14 @@ public record PluginSettings(
         int maxPairClaims = config.getInt("claim.repeated-pair-max-claims", 2);
         if (maxPairClaims < 1) throw invalid("claim.repeated-pair-max-claims must be >= 1");
 
+        int maxContracts = config.getInt("contract.max-active-per-hunter", 3);
+        if (maxContracts < 1 || maxContracts > 100) throw invalid("contract.max-active-per-hunter must be between 1 and 100");
+        int reservationLimit = config.getInt("contract.public-reservation-limit", 8);
+        if (reservationLimit < 1 || reservationLimit > 100) throw invalid("contract.public-reservation-limit must be between 1 and 100");
+        long contractSync = positive(config.getLong("contract.sync-seconds", 30), "contract.sync-seconds");
+
         String provider = storage.getString("provider", "SQLITE").toUpperCase(Locale.ROOT);
-        if (!provider.equals("SQLITE")) throw invalid("beta.1 supports only SQLITE storage");
+        if (!provider.equals("SQLITE")) throw invalid("beta.2 supports only SQLITE storage");
 
         String fileName = storage.getString("sqlite.file", "bounty.db");
         Path dataRoot = plugin.getDataFolder().toPath().toAbsolutePath().normalize();
@@ -91,8 +100,7 @@ public record PluginSettings(
                 config.getBoolean("placement.allow-offline-targets", true),
                 config.getBoolean("placement.stacking-enabled", true),
                 nonNegative(config.getLong("placement.minimum-playtime-seconds", 0), "placement.minimum-playtime-seconds"),
-                maxActive,
-                duration,
+                maxActive, duration,
                 lowerSet(config, "placement.blacklisted-worlds"),
                 lowerSet(config, "claim.blacklisted-worlds"),
                 nonNegative(config.getLong("claim.killer-victim-cooldown-seconds", 3600), "claim.killer-victim-cooldown-seconds"),
@@ -102,12 +110,9 @@ public record PluginSettings(
                 nonNegative(config.getLong("claim.minimum-survival-after-claim-seconds", 300), "claim.minimum-survival-after-claim-seconds"),
                 enumValue(RefundPolicy.class, config.getString("refund.on-expire", "FULL"), "refund.on-expire"),
                 enumValue(RefundPolicy.class, config.getString("refund.on-admin-cancel", "FULL"), "refund.on-admin-cancel"),
-                scan,
+                scan, maxContracts, reservationLimit, contractSync,
                 config.getBoolean("runtime.debug", false),
-                dbPath,
-                busyTimeout,
-                journal,
-                synchronous
+                dbPath, busyTimeout, journal, synchronous
         );
     }
 
@@ -122,11 +127,8 @@ public record PluginSettings(
     private static BigDecimal decimal(FileConfiguration config, String path) {
         String raw = config.getString(path);
         if (raw == null) throw invalid("Missing required numeric setting: " + path);
-        try {
-            return new BigDecimal(raw.trim());
-        } catch (NumberFormatException ex) {
-            throw invalid("Invalid decimal at " + path + ": " + raw);
-        }
+        try { return new BigDecimal(raw.trim()); }
+        catch (NumberFormatException ex) { throw invalid("Invalid decimal at " + path + ": " + raw); }
     }
 
     private static Set<String> lowerSet(FileConfiguration config, String path) {
@@ -146,11 +148,8 @@ public record PluginSettings(
     }
 
     private static <E extends Enum<E>> E enumValue(Class<E> type, String raw, String path) {
-        try {
-            return Enum.valueOf(type, raw.toUpperCase(Locale.ROOT));
-        } catch (Exception ex) {
-            throw invalid("Invalid value at " + path + ": " + raw);
-        }
+        try { return Enum.valueOf(type, raw.toUpperCase(Locale.ROOT)); }
+        catch (Exception ex) { throw invalid("Invalid value at " + path + ": " + raw); }
     }
 
     private static IllegalArgumentException invalid(String message) {

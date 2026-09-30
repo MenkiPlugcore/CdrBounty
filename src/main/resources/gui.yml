@@ -1,3 +1,7 @@
-# Reserved for future GUI milestones.
-# beta.1 remains command-first so core lifecycle and economy invariants stay testable.
-enabled: false
+enabled: true
+contract-browser:
+  title: "&8CdrBounty Contracts"
+  rows: 6
+  max-contracts: 45
+  left-click: "ACCEPT"
+  right-click: "ABANDON"

@@ -18,11 +18,11 @@ import java.util.Map;
 public final class BountyListener implements Listener {
     private final JavaPlugin plugin;
     private final BountyRepository repository;
-    private final BountyClaimService claimService;
+    private final ContractClaimService claimService;
     private final MessageService messages;
     private final VaultEconomyAdapter economy;
 
-    public BountyListener(JavaPlugin plugin, BountyRepository repository, BountyClaimService claimService,
+    public BountyListener(JavaPlugin plugin, BountyRepository repository, ContractClaimService claimService,
                           MessageService messages, VaultEconomyAdapter economy) {
         this.plugin = plugin;
         this.repository = repository;
@@ -50,12 +50,11 @@ public final class BountyListener implements Listener {
         claimService.claim(victim, killer).thenAccept(result -> MainThread.run(plugin, () -> {
             switch (result.status()) {
                 case PAID -> killer.sendMessage(messages.text("claim-success", Map.of(
-                        "amount", economy.format(result.amount()),
-                        "target", victim.getName()
-                )));
+                        "amount", economy.format(result.amount()), "target", victim.getName())));
                 case BLOCKED -> killer.sendMessage(messages.text("claim-blocked", Map.of("reason", result.reason())));
                 case FAILED -> {
-                    plugin.getLogger().warning("Bounty claim failed for " + killer.getName() + " -> " + victim.getName() + ": " + result.reason());
+                    plugin.getLogger().warning("Bounty claim failed for " + killer.getName() + " -> "
+                            + victim.getName() + ": " + result.reason());
                     killer.sendMessage(messages.text("internal-error"));
                 }
                 case NO_BOUNTY -> { }

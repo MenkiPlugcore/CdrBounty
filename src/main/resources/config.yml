@@ -13,6 +13,11 @@ placement:
   duration-seconds: 604800
   blacklisted-worlds: []
 
+contract:
+  max-active-per-hunter: 3
+  public-reservation-limit: 8
+  sync-seconds: 30
+
 claim:
   blacklisted-worlds: []
   killer-victim-cooldown-seconds: 3600
