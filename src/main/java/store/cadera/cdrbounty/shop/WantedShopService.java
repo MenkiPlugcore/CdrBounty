@@ -4,7 +4,6 @@ import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.plugin.java.JavaPlugin;
 import store.cadera.cdrbounty.api.CdrBountyShopApi;
 import store.cadera.cdrbounty.contract.ContractRepository;
-import store.cadera.cdrbounty.contract.ContractView;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -69,7 +68,7 @@ public final class WantedShopService implements CdrBountyShopApi {
                             return;
                         }
                         Map<UUID, BigDecimal> next = new ConcurrentHashMap<>();
-                        for (ContractView view : views) {
+                        for (ContractRepository.ContractView view : views) {
                             next.merge(view.contract().targetUuid(), view.contract().rewardAmount(), BigDecimal::add);
                         }
                         totals.clear();
