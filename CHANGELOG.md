@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.2.2-beta.2 — NPC UX Polish
+
+- Added a three-entry Bounty Master menu: Bounty Board, My Contracts, and Pasang Bounty.
+- Added My Contracts view for each hunter with direct GUI abandon support.
+- Replaced the simple PUBLIC-only placement prompt with a multi-stage NPC placement wizard.
+- Added PUBLIC/PRIVATE visibility selection with private hunter allowlists.
+- Added EXCLUSIVE and ANONYMOUS toggles without restoring any player commands.
+- Added GUI selection for required/forbidden world conditions.
+- Added required-weapon selection from the player's current main-hand item.
+- Added a final confirmation screen showing target, nominal, placement fee, clean reward, balance, duration, flags, and conditions before escrow is charged.
+- Added back/cancel controls throughout the placement flow.
+- Added hidden chat-input timeout and `batal` / `cancel` / `kembali` handling.
+- Added resumable placement drafts from the Bounty Master menu.
+- Added NPC interaction click cooldown to reduce duplicate GUI opens.
+- Added default `npc.input-timeout-seconds` and `npc.click-cooldown-millis` configuration.
+- Kept all validation and escrow execution inside ContractService/BountyPlacementService.
+
 ## 0.2.1-beta.2 — NPC-Only Access
 
 - Removed the player-facing `/bounty` command from plugin registration.
