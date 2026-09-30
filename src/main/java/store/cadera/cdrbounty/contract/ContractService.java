@@ -6,6 +6,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 import store.cadera.cdrbounty.approval.BountyApprovalService;
 import store.cadera.cdrbounty.bounty.BountyPlacementService;
 import store.cadera.cdrbounty.config.PluginSettings;
+import store.cadera.cdrbounty.core.MainThread;
 import store.cadera.cdrbounty.economy.MoneyMath;
 
 import java.math.BigDecimal;
@@ -98,7 +99,11 @@ public final class ContractService {
                                             + " funded but approval submission is pending recovery: " + rootMessage(error));
                                     return CreateResult.recoveryPending(contractId, result.rewardAmount());
                                 }
-                                issuer.sendMessage("§eRequest bounty sudah dikirim ke admin dan menunggu persetujuan.");
+                                MainThread.run(plugin, () -> {
+                                    if (issuer.isOnline()) {
+                                        issuer.sendMessage("§eRequest bounty sudah dikirim ke admin dan menunggu persetujuan.");
+                                    }
+                                });
                                 return CreateResult.pending(contractId, result.rewardAmount());
                             });
                 });
