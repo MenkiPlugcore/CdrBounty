@@ -36,6 +36,21 @@ tracking:
     far-offset: 80
     very-far-offset: 120
 
+reputation-auto-bounty:
+  enabled: true
+  announce: true
+  reset-threshold: -500
+  tiers:
+    outlaw:
+      threshold: -1000
+      add-bounty: "25000.00"
+    infamous:
+      threshold: -2000
+      add-bounty: "25000.00"
+    public-enemy:
+      threshold: -3500
+      add-bounty: "50000.00"
+
 claim:
   blacklisted-worlds: []
   killer-victim-cooldown-seconds: 3600
