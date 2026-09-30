@@ -9,7 +9,9 @@ import org.bukkit.OfflinePlayer;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
+import org.bukkit.event.player.PlayerChangedWorldEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.CompassMeta;
 import org.bukkit.inventory.meta.ItemMeta;
@@ -96,7 +98,28 @@ public final class BountyTrackerService implements Listener {
 
     @EventHandler
     public void onJoin(PlayerJoinEvent event) {
-        Bukkit.getScheduler().runTaskLater(plugin, () -> refreshPlayer(event.getPlayer()), 20L);
+        Player player = event.getPlayer();
+        syncTarget(player.getUniqueId(), !pauseWorld(player.getWorld().getName()));
+        Bukkit.getScheduler().runTaskLater(plugin, () -> refreshPlayer(player), 20L);
+    }
+
+    @EventHandler
+    public void onQuit(PlayerQuitEvent event) {
+        syncTarget(event.getPlayer().getUniqueId(), false);
+    }
+
+    @EventHandler
+    public void onWorldChanged(PlayerChangedWorldEvent event) {
+        Player player = event.getPlayer();
+        syncTarget(player.getUniqueId(), !pauseWorld(player.getWorld().getName()));
+    }
+
+    private void syncTarget(UUID targetId, boolean available) {
+        repository.applyAvailability(Map.of(targetId, available), Instant.now())
+                .exceptionally(ex -> {
+                    plugin.getLogger().warning("Immediate target availability sync failed: " + root(ex));
+                    return 0;
+                });
     }
 
     private void syncPauseState() {
@@ -118,7 +141,7 @@ public final class BountyTrackerService implements Listener {
                     if (error != null) {
                         plugin.getLogger().warning("Bounty pause heartbeat failed: " + root(error));
                     } else if (plugin.getConfig().getBoolean("runtime.debug", false) && changed > 0) {
-                        plugin.getLogger().info("Tracking pause heartbeat changed " + changed + " contract state(s).\n");
+                        plugin.getLogger().info("Tracking pause heartbeat changed " + changed + " contract state(s).");
                     }
                 });
     }
