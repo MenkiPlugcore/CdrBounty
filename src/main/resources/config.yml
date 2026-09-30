@@ -51,6 +51,23 @@ reputation-auto-bounty:
       threshold: -3500
       add-bounty: "50000.00"
 
+shop-integration:
+  enabled: true
+  refresh-seconds: 3
+  tiers:
+    low:
+      minimum-bounty: "10000.00"
+      buy-multiplier: 1.10
+    medium:
+      minimum-bounty: "50000.00"
+      buy-multiplier: 1.25
+    high:
+      minimum-bounty: "100000.00"
+      buy-multiplier: 1.50
+    extreme:
+      minimum-bounty: "500000.00"
+      buy-multiplier: 2.00
+
 claim:
   blacklisted-worlds: []
   killer-victim-cooldown-seconds: 3600
