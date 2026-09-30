@@ -2,19 +2,20 @@
 
 > **You don't claim bounties. You hunt people.**
 
-CdrBounty is an NPC-driven bounty framework for Paper servers. Normal players interact through a Citizens Bounty Master NPC. Player bounty requests require administrator approval, hunters receive an intentionally inaccurate compass tracker, poor CdrReputation can create system bounties, BetonQuest can create private quest-specific hunts, and active bounties can now apply economic consequences through a public shop-pricing API.
+CdrBounty is an NPC-driven bounty framework for Paper servers. Normal players interact through a Citizens Bounty Master NPC. Player bounty requests require administrator approval, hunters receive an intentionally inaccurate compass tracker, poor CdrReputation can create system bounties, BetonQuest can create private quest-specific hunts, and active bounties can apply economic consequences through the shop-pricing API.
 
 ## Current Release
 
-**CdrBounty `0.7.0 — Shop Price Integration`**
+**CdrBounty `0.9.0 — Production Hardening`**
 
 Target: Paper 1.21.11, Java 21, Vault, Citizens, BetonQuest 3.2.0, and a Vault-compatible economy provider.
 
 Optional integrations:
 - CdrReputation — automatic system bounty thresholds.
 - BetonQuest — quest bounty actions and conditions.
-- CdrQuestJournal — coordinated through the same BetonQuest event chain; CdrBounty does not bypass Journal lifecycle or safe turn-in.
+- CdrQuestJournal — journal / safe turn-in through the BetonQuest chain.
 - CdrVephilimEconomy — higher BUY prices for players with active bounties.
+- Geyser/Floodgate — NPC inventory/chat interaction remains crossplay-safe; no player bounty commands are required.
 
 ## Player Flow
 
@@ -46,13 +47,43 @@ PENDING_APPROVAL
 └─ REJECT  → full requester refund
 ```
 
-`PENDING_APPROVAL` does not make the target wanted for shop pricing. Only active `OPEN` / `RESERVED` contracts contribute to the wanted total.
+Only active `OPEN` / `RESERVED` contracts count as wanted for shop pricing.
+
+## Production Hardening
+
+`0.9.0` adds:
+- config schema `config-version: 9` with automatic missing-key migration;
+- backup of the existing config before migration;
+- `/cdrbounty diagnose` production health command;
+- SQLite `PRAGMA integrity_check`;
+- orphan contract/hunter/condition/quest-link checks;
+- unresolved economy-operation diagnostics;
+- Citizens Bounty Master binding health reporting;
+- installed integration reporting (Citizens, Vault, CdrReputation, BetonQuest, CdrQuestJournal, Floodgate);
+- stale and duplicate Bounty Tracker sanitation on periodic refresh/join;
+- optional hunter/target minimum-playtime claim gates for anti-alt deployments;
+- startup crossplay/diagnostic logging.
+
+Upgrade from older versions does **not** require deleting the CdrBounty data folder. Missing config keys are migrated while current values are preserved, and a backup is created before the first migration.
+
+Optional anti-alt gates:
+
+```yaml
+claim:
+  same-ip-policy: BLOCK
+  killer-victim-cooldown-seconds: 3600
+  repeated-pair-window-seconds: 86400
+  repeated-pair-max-claims: 2
+  minimum-hunter-playtime-seconds: 0
+  minimum-target-playtime-seconds: 0
+  minimum-survival-after-claim-seconds: 300
+```
+
+`0` disables the playtime gate. Existing same-IP, repeated-pair and cooldown protections remain active according to configuration.
 
 ## Shop Price Integration
 
-CdrBounty publishes `CdrBountyShopApi` through Bukkit ServicesManager. Shop plugins consume an in-memory snapshot instead of querying bounty SQLite during every GUI render or transaction.
-
-API:
+CdrBounty publishes `CdrBountyShopApi` through Bukkit ServicesManager:
 
 ```java
 boolean isWanted(UUID playerId);
@@ -63,34 +94,13 @@ double shopBuyMultiplier(UUID playerId);
 Default BUY multipliers:
 
 ```text
-Active bounty >= 100       → 1.10x
+Active bounty >= 10,000    → 1.10x
 Active bounty >= 50,000    → 1.25x
 Active bounty >= 100,000   → 1.50x
 Active bounty >= 500,000   → 2.00x
 ```
 
-Configuration:
-
-```yaml
-shop-integration:
-  enabled: true
-  refresh-seconds: 3
-  tiers:
-    low:
-      minimum-bounty: "100.00"
-      buy-multiplier: 1.10
-    medium:
-      minimum-bounty: "50000.00"
-      buy-multiplier: 1.25
-    high:
-      minimum-bounty: "100000.00"
-      buy-multiplier: 1.50
-    extreme:
-      minimum-bounty: "500000.00"
-      buy-multiplier: 2.00
-```
-
-CdrVephilimEconomy applies the surcharge after market/dynamic pricing and personal BUY discounts:
+CdrVephilimEconomy applies:
 
 ```text
 market price
@@ -102,60 +112,26 @@ CdrBounty wanted multiplier
 FINAL BUY PRICE
 ```
 
-SELL prices are intentionally unchanged. The same final BUY quote is used by Java GUI, Bedrock forms, and server-side transaction validation.
+SELL prices remain unchanged. GUI/form quotes and transaction revalidation must use the same final BUY quote.
 
 ## Quest Integration
 
-CdrBounty registers native BetonQuest 3.2.0 actions and conditions through `IntegrationService`.
-
-### Actions
+Native BetonQuest 3.2.0 hooks:
 
 ```text
+Actions:
 cdrbounty_create <questKey> <targetNameOrUuid> <amount>
 cdrbounty_cancel <questKey>
-```
 
-Quest contracts are server-funded, skip administrator approval, use `PRIVATE + EXCLUSIVE`, are allowlisted to the quest player, auto-accepted, and issue the tracker automatically. Normal claim validation, anti-farm, inaccurate tracking, pause timer, and payout still apply.
-
-Calling `cdrbounty_create` again while the same player's `questKey` is still active reuses the existing contract. Once the latest attempt is terminal, the same key may create a new contract for repeatable quests.
-
-### Conditions
-
-```text
+Conditions:
 cdrbounty_has <questKey>
 cdrbounty_active <questKey>
 cdrbounty_completed <questKey>
 ```
 
-Recommended chain:
-
-```text
-Quest NPC / BetonQuest
-↓
-cdrjournal_start red_pirate
-↓
-cdrbounty_create red_pirate Redbeard 50000
-↓
-PRIVATE + EXCLUSIVE bounty auto-accepted
-↓
-hunt + successful bounty settlement
-↓
-cdrbounty_completed red_pirate = true
-↓
-BetonQuest advances Journal objective
-↓
-cdrjournal_prepare
-↓
-external rewards / reputation
-↓
-cdrjournal_finalize
-```
-
-BetonQuest remains the quest logic authority and CdrQuestJournal remains the journal / safe-turn-in authority.
+Quest contracts are server-funded, `PRIVATE + EXCLUSIVE`, allowlisted to the quest player, auto-accepted, and use the same tracking, pause, anti-farm and settlement pipeline.
 
 ## Reputation Auto-Bounty
-
-When CdrReputation is installed, CdrBounty consumes its Bukkit API/event rather than reading the reputation database.
 
 Default cumulative thresholds:
 
@@ -165,11 +141,9 @@ Reputation <= -2000 → +25,000
 Reputation <= -3500 → +50,000
 ```
 
-If an existing SYSTEM bounty is still active, later escalation tops up the same contract rather than creating duplicate board entries.
+Existing active SYSTEM bounties are topped up instead of duplicated.
 
 ## Inaccurate Bounty Tracker
-
-The tracker never receives exact live target coordinates.
 
 ```text
 0–300 blocks      → ±25 blocks
@@ -178,28 +152,14 @@ The tracker never receives exact live target coordinates.
 >2000             → ±120 blocks
 ```
 
-The approximate point is regenerated periodically. Cross-world targets produce **Signal Lost**. The active bounty timer pauses while the target is offline or inside configured safe worlds such as `lobby`; contract and contribution deadlines are extended together.
-
-## Bounty Master Features
-
-The NPC wizard supports:
-- Bounty Board;
-- My Contracts;
-- bounty placement;
-- `PUBLIC` / `PRIVATE`;
-- `EXCLUSIVE`;
-- `ANONYMOUS`;
-- required/forbidden world;
-- required weapon;
-- confirmation before escrow;
-- private chat input with timeout/cancel;
-- resumable placement drafts.
+Cross-world targets produce **Signal Lost**. Offline targets and targets in configured pause worlds such as `lobby` pause the active bounty timer. Duplicate/stale tracker items are sanitized automatically.
 
 ## Admin Commands
 
 ```text
-/cdrbounty npc bind
 /cdrbounty approval
+/cdrbounty diagnose
+/cdrbounty npc bind
 /cdrbounty npc info
 /cdrbounty npc unbind
 /cdrbounty reload
@@ -210,14 +170,13 @@ The NPC wizard supports:
 
 ## Safety / Persistence
 
-- SQLite-backed contracts, approval, tracking, reputation escalation, and quest bindings.
-- Wanted shop pricing is served from a periodically refreshed thread-safe cache.
-- Pending/unapproved bounty requests do not affect shop prices.
-- Quest and reputation bounties use the same settlement and anti-farm pipeline.
-- Player bounty economy operations remain escrow-backed and recoverable.
+- SQLite-backed contracts, approval, tracking, reputation escalation and quest bindings.
+- Recoverable Vault economy intents for player escrow/refunds/payouts.
+- Same-IP, repeated pair, pair cooldown and target survival anti-farm checks.
+- Optional minimum hunter/target playtime gates.
 - Per-player hunting only; no shared party contracts.
-- Tracker items are tied to contract UUIDs through PDC and cleaned when stale.
-- Optional integrations remain soft dependencies; core NPC bounty gameplay remains loadable without them.
+- Tracker items are tied to contract UUIDs through PDC.
+- Optional integrations remain soft dependencies.
 
 ## Roadmap
 
@@ -227,8 +186,8 @@ The NPC wizard supports:
 0.5.0 ✅ Reputation Auto-Bounty
 0.6.0 ✅ Quest Integration
 0.7.0 ✅ Shop Price Integration
-0.9.0 → Polish / Crossplay / Anti-Abuse
-1.0.0 → Production
+0.9.0 ✅ Polish / Crossplay / Anti-Abuse
+1.0.0 → Production Stable
 ```
 
 See [`ROADMAP.md`](ROADMAP.md).
@@ -238,8 +197,6 @@ See [`ROADMAP.md`](ROADMAP.md).
 ```bash
 mvn clean verify
 ```
-
-CI validates the packaged JAR, public shop API, wanted-price cache service, quest/reputation/tracking classes, version/config metadata, and confirms that player `/bounty` has not been reintroduced.
 
 ## License
 
