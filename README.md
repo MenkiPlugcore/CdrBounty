@@ -6,16 +6,18 @@ CdrBounty is an NPC-driven bounty framework for Paper servers. Normal players in
 
 ## Current Release
 
-**CdrBounty `0.9.0 — Production Hardening`**
+**CdrBounty `1.0.0 — Production Stable`**
 
-Target: Paper 1.21.11, Java 21, Vault, Citizens, BetonQuest 3.2.0, and a Vault-compatible economy provider.
+Target: Paper 1.21.11, Java 21, Vault, Citizens, and a Vault-compatible economy provider.
 
 Optional integrations:
 - CdrReputation — automatic system bounty thresholds.
-- BetonQuest — quest bounty actions and conditions.
+- BetonQuest 3.2.0 — quest bounty actions and conditions.
 - CdrQuestJournal — journal / safe turn-in through the BetonQuest chain.
-- CdrVephilimEconomy — higher BUY prices for players with active bounties.
-- Geyser/Floodgate — NPC inventory/chat interaction remains crossplay-safe; no player bounty commands are required.
+- CdrVephilimEconomy RC7+ — higher BUY prices for players with active bounties.
+- Geyser/Floodgate — crossplay deployment.
+
+The 1.0.0 release is feature-frozen. Production installation, upgrade, command, permission, and smoke-test instructions are in [`PRODUCTION.md`](PRODUCTION.md).
 
 ## Player Flow
 
@@ -49,22 +51,21 @@ PENDING_APPROVAL
 
 Only active `OPEN` / `RESERVED` contracts count as wanted for shop pricing.
 
-## Production Hardening
+## Production Safety
 
-`0.9.0` adds:
-- config schema `config-version: 9` with automatic missing-key migration;
-- backup of the existing config before migration;
-- `/cdrbounty diagnose` production health command;
-- SQLite `PRAGMA integrity_check`;
-- orphan contract/hunter/condition/quest-link checks;
+CdrBounty 1.0.0 includes the 0.9 hardening baseline:
+- config schema `config-version: 9` with safe missing-key migration and pre-migration backup;
+- `/cdrbounty diagnose` production health checks;
+- SQLite `PRAGMA integrity_check` and orphan-data checks;
 - unresolved economy-operation diagnostics;
 - Citizens Bounty Master binding health reporting;
-- installed integration reporting (Citizens, Vault, CdrReputation, BetonQuest, CdrQuestJournal, Floodgate);
-- stale and duplicate Bounty Tracker sanitation on periodic refresh/join;
-- optional hunter/target minimum-playtime claim gates for anti-alt deployments;
-- startup crossplay/diagnostic logging.
+- integration presence reporting including Floodgate detection;
+- stale/duplicate Bounty Tracker sanitation;
+- optional hunter/target minimum-playtime claim gates;
+- same-IP, pair cooldown, repeated-pair, and target-survival anti-farm protections;
+- recovery-aware escrow/refund/payout persistence.
 
-Upgrade from older versions does **not** require deleting the CdrBounty data folder. Missing config keys are migrated while current values are preserved, and a backup is created before the first migration.
+Upgrade from 0.7.0 or 0.9.0 does **not** require deleting `plugins/CdrBounty/`. Replace the JAR while the server is stopped, keep the data folder, start the server, then run `/cdrbounty diagnose`.
 
 Optional anti-alt gates:
 
@@ -79,7 +80,7 @@ claim:
   minimum-survival-after-claim-seconds: 300
 ```
 
-`0` disables the playtime gate. Existing same-IP, repeated-pair and cooldown protections remain active according to configuration.
+`0` disables the minimum-playtime gate.
 
 ## Shop Price Integration
 
@@ -100,7 +101,7 @@ Active bounty >= 100,000   → 1.50x
 Active bounty >= 500,000   → 2.00x
 ```
 
-CdrVephilimEconomy applies:
+CdrVephilimEconomy RC7+ applies:
 
 ```text
 market price
@@ -163,10 +164,14 @@ Cross-world targets produce **Signal Lost**. Offline targets and targets in conf
 /cdrbounty npc info
 /cdrbounty npc unbind
 /cdrbounty reload
+/cdrbounty add <player> <amount>
+/cdrbounty remove <player> all
 /cdrbounty inspect <player>
 /cdrbounty history <player>
 /cdrbounty debug
 ```
+
+See [`PRODUCTION.md`](PRODUCTION.md) for the full permission reference.
 
 ## Safety / Persistence
 
@@ -187,7 +192,7 @@ Cross-world targets produce **Signal Lost**. Offline targets and targets in conf
 0.6.0 ✅ Quest Integration
 0.7.0 ✅ Shop Price Integration
 0.9.0 ✅ Polish / Crossplay / Anti-Abuse
-1.0.0 → Production Stable
+1.0.0 ✅ Production Stable
 ```
 
 See [`ROADMAP.md`](ROADMAP.md).
@@ -197,6 +202,8 @@ See [`ROADMAP.md`](ROADMAP.md).
 ```bash
 mvn clean verify
 ```
+
+CI validates the production JAR metadata, config schema, license packaging, diagnostics, integrations, final permissions, and confirms that a player `/bounty` command has not been reintroduced.
 
 ## License
 
