@@ -28,6 +28,8 @@ import store.cadera.cdrbounty.storage.BountyMaintenanceRepository;
 import store.cadera.cdrbounty.storage.BountyRepository;
 import store.cadera.cdrbounty.storage.SQLiteBountyRepository;
 import store.cadera.cdrbounty.storage.SQLiteMaintenanceRepository;
+import store.cadera.cdrbounty.tracking.BountyTrackerService;
+import store.cadera.cdrbounty.tracking.TrackingRepository;
 
 import java.io.File;
 import java.time.Instant;
@@ -41,6 +43,7 @@ public final class CdrBountyPlugin extends JavaPlugin {
     private BountyMaintenanceRepository maintenance;
     private ContractRepository contractRepository;
     private ApprovalRepository approvalRepository;
+    private TrackingRepository trackingRepository;
     private BountyNpcBindingService npcBinding;
 
     @Override
@@ -59,6 +62,8 @@ public final class CdrBountyPlugin extends JavaPlugin {
             contractRepository.initialize();
             approvalRepository = new ApprovalRepository(settings);
             approvalRepository.initialize();
+            trackingRepository = new TrackingRepository(settings);
+            trackingRepository.initialize();
 
             AntiFarmService antiFarm = new AntiFarmService(repository, maintenance, this::settings);
             BountyPlacementService placement = new BountyPlacementService(this, repository, economy, this::settings);
@@ -69,7 +74,8 @@ public final class CdrBountyPlugin extends JavaPlugin {
                     this, contractRepository, placement, approvals, this::settings);
             ContractClaimService claim = new ContractClaimService(
                     this, repository, contractRepository, economy, antiFarm, this::settings);
-            ContractGuiService gui = new ContractGuiService(this, contracts, economy);
+            BountyTrackerService trackers = new BountyTrackerService(this, trackingRepository);
+            ContractGuiService gui = new ContractGuiService(this, contracts, economy, trackers);
             ApprovalAdminGui approvalGui = new ApprovalAdminGui(this, approvals, economy);
             npcBinding = new BountyNpcBindingService(this);
             BountyPlacementWizard wizard = new BountyPlacementWizard(this, contracts, economy, this::settings);
@@ -85,6 +91,7 @@ public final class CdrBountyPlugin extends JavaPlugin {
             getServer().getPluginManager().registerEvents(wizard, this);
             getServer().getPluginManager().registerEvents(npcService, this);
             getServer().getPluginManager().registerEvents(approvalGui, this);
+            getServer().getPluginManager().registerEvents(trackers, this);
 
             new RecoveryService(this, repository, maintenance, economy, this::settings)
                     .recover()
@@ -93,8 +100,8 @@ public final class CdrBountyPlugin extends JavaPlugin {
                     .thenCompose(reconciled -> contractRepository.syncTerminalStates(Instant.now()))
                     .thenRun(() -> MainThread.run(this, () -> {
                         getLogger().info("Economy + approval + contract recovery scan completed.");
+                        trackers.start();
                         refunds.startExpirationTask();
-                        refunds.scanExpired();
                         contracts.startMaintenance();
                         approvals.pendingCount().thenAccept(count -> {
                             if (count > 0) getLogger().info(count + " bounty request(s) waiting for admin approval.");
@@ -106,7 +113,7 @@ public final class CdrBountyPlugin extends JavaPlugin {
                     });
 
             getLogger().info("CdrBounty " + getPluginMeta().getVersion()
-                    + " enabled with NPC-only player access + Admin Approval + SQLite + Vault.");
+                    + " enabled with NPC-only access + Admin Approval + Inaccurate Tracking + SQLite + Vault.");
         } catch (Exception ex) {
             getLogger().severe("CdrBounty failed to start safely: " + rootMessage(ex));
             ex.printStackTrace();
@@ -116,6 +123,7 @@ public final class CdrBountyPlugin extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        if (trackingRepository != null) trackingRepository.close();
         if (approvalRepository != null) approvalRepository.close();
         if (contractRepository != null) contractRepository.close();
         if (maintenance != null) maintenance.close();
