@@ -1,16 +1,16 @@
 name: CdrBounty
-version: 0.7.0
+version: 0.9.0
 main: store.cadera.cdrbounty.CdrBountyPlugin
 api-version: '1.21'
 author: CADERA
-description: NPC-driven bounty contracts with approval, tracking, reputation, quest, and wanted shop integration for Paper 1.21.11.
+description: NPC-driven bounty contracts with approval, tracking, reputation, quest, shop integration, and production hardening for Paper 1.21.11.
 depend: [Vault, Citizens]
 softdepend: [CdrReputation, BetonQuest, CdrQuestJournal]
 
 commands:
   cdrbounty:
     description: CdrBounty administration command.
-    usage: /cdrbounty <approval|reload|add|remove|inspect|history|debug|npc>
+    usage: /cdrbounty <approval|diagnose|reload|add|remove|inspect|history|debug|npc>
     permission: cdrbounty.admin
 
 permissions:
