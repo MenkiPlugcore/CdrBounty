@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.4.0 — Inaccurate Compass Tracking
+
+- Added a per-contract **Bounty Tracker** compass when a hunter accepts a bounty.
+- Tracker direction uses a regenerated random offset instead of exact target coordinates.
+- Added configurable accuracy bands; default offset grows from ±25 blocks nearby to ±120 blocks at very long distance.
+- Tracker reports `Signal Lost` when the target is offline, inside a configured safe/pause world, or in another world/dimension.
+- Added left-click tracker reissue from accepted entries in **My Contracts** / Bounty Board.
+- Abandoning a contract immediately removes its tracker; stale tracker items are cleaned during periodic refresh.
+- Added persistent `contract_tracking_pause` heartbeat storage.
+- Contract and escrow contribution deadlines now pause together while the target is offline or inside configured pause worlds such as `lobby`.
+- Join, quit, and world-change events synchronize target availability immediately, with a periodic heartbeat as recovery fallback.
+- Removed the immediate startup expiration scan so the tracking pause heartbeat initializes before the first scheduled expiration pass.
+- Added `tracking.update-seconds`, `tracking.pause-scan-seconds`, `tracking.pause-worlds`, and configurable accuracy settings.
+- Added tracker accuracy regression tests and CI validation for the tracking classes/configuration.
+
 ## 0.3.0 — Admin Approval
 
 - Added `PENDING_APPROVAL` and `REJECTED` contract states.
