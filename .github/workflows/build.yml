@@ -31,25 +31,26 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          JAR="target/CdrBounty-0.4.0.jar"
+          JAR="target/CdrBounty-0.5.0.jar"
           test -f "$JAR"
           jar tf "$JAR" > jar-contents.txt
           grep -qx 'plugin.yml' jar-contents.txt
           grep -qx 'config.yml' jar-contents.txt
           grep -q 'store/cadera/cdrbounty/approval/ApprovalRepository.class' jar-contents.txt
-          grep -q 'store/cadera/cdrbounty/approval/BountyApprovalService.class' jar-contents.txt
-          grep -q 'store/cadera/cdrbounty/tracking/TrackingRepository.class' jar-contents.txt
           grep -q 'store/cadera/cdrbounty/tracking/BountyTrackerService.class' jar-contents.txt
-          grep -q 'store/cadera/cdrbounty/tracking/TrackerAccuracy.class' jar-contents.txt
+          grep -q 'store/cadera/cdrbounty/reputation/ReputationAutoBountyPolicy.class' jar-contents.txt
+          grep -q 'store/cadera/cdrbounty/reputation/ReputationAutoBountyRepository.class' jar-contents.txt
+          grep -q 'store/cadera/cdrbounty/reputation/ReputationAutoBountyService.class' jar-contents.txt
           grep -q 'store/cadera/cdrbounty/contract/ContractService.class' jar-contents.txt
           grep -q 'store/cadera/cdrbounty/npc/BountyNpcService.class' jar-contents.txt
           unzip -p "$JAR" plugin.yml > packaged-plugin.yml
           unzip -p "$JAR" config.yml > packaged-config.yml
-          grep -q '^version: 0.4.0$' packaged-plugin.yml
+          grep -q '^version: 0.5.0$' packaged-plugin.yml
           grep -q '^depend: \[Vault, Citizens\]' packaged-plugin.yml
-          grep -q '^tracking:$' packaged-config.yml
-          grep -q '^  update-seconds: 20$' packaged-config.yml
-          grep -q '^  pause-scan-seconds: 5$' packaged-config.yml
+          grep -q '^softdepend: \[CdrReputation\]' packaged-plugin.yml
+          grep -q '^reputation-auto-bounty:$' packaged-config.yml
+          grep -q '^  reset-threshold: -500$' packaged-config.yml
+          grep -q '^    public-enemy:$' packaged-config.yml
           if grep -q '^  bounty:' packaged-plugin.yml; then
             echo 'Player /bounty command must not be registered.' >&2
             exit 1
@@ -59,6 +60,6 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v7
         with:
-          name: CdrBounty-0.4.0
-          path: target/CdrBounty-0.4.0.jar
+          name: CdrBounty-0.5.0
+          path: target/CdrBounty-0.5.0.jar
           if-no-files-found: error
