@@ -1,9 +1,9 @@
 name: CdrBounty
-version: 0.3.0
+version: 0.4.0
 main: store.cadera.cdrbounty.CdrBountyPlugin
 api-version: '1.21'
 author: CADERA
-description: NPC-driven bounty contracts with administrator approval for Paper 1.21.11.
+description: NPC-driven bounty contracts with admin approval and inaccurate compass tracking for Paper 1.21.11.
 depend: [Vault, Citizens]
 
 commands:
