@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.5.0 — Reputation Auto-Bounty
+
+- Added optional runtime integration with CdrReputation through Bukkit ServicesManager and `ReputationChangeEvent`.
+- Kept CdrReputation as a soft dependency; CdrBounty remains startable without it.
+- Added configurable negative reputation thresholds that create system-funded PUBLIC bounty contracts automatically.
+- System bounties bypass player-request admin approval and open immediately.
+- Added cumulative threshold escalation so one large reputation drop can cross multiple configured tiers in one evaluation.
+- Added persistent `reputation_auto_bounty_state` to prevent duplicate bounty issuance while a player remains in the same reputation tier.
+- Added configurable `reset-threshold`; recovering above it rearms future automatic escalation.
+- System bounty contribution, structured contract, escalation state, contract history, and audit record are written atomically in one SQLite transaction.
+- Added startup/join reputation reconciliation for online players.
+- Added optional system-bounty broadcast and direct target notification.
+- Bounty Board now labels reputation-generated bounties with `Issuer: SYSTEM`.
+- Reputation-generated contracts use the existing NPC board, hunter acceptance, inaccurate tracker, pause timer, anti-farm checks, and claim settlement.
+- Added pure policy regression tests covering cumulative drops, escalation, duplicate prevention, and reset behavior.
+- Added default thresholds: `-1000 +25k`, `-2000 +25k`, and `-3500 +50k`.
+
 ## 0.4.0 — Inaccurate Compass Tracking
 
 - Added a per-contract **Bounty Tracker** compass when a hunter accepts a bounty.
