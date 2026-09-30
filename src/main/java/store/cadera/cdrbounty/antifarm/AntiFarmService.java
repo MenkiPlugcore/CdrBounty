@@ -1,5 +1,6 @@
 package store.cadera.cdrbounty.antifarm;
 
+import org.bukkit.Statistic;
 import org.bukkit.entity.Player;
 import store.cadera.cdrbounty.config.PluginSettings;
 import store.cadera.cdrbounty.storage.BountyMaintenanceRepository;
@@ -26,7 +27,6 @@ public final class AntiFarmService {
     public CompletableFuture<Decision> evaluate(Player killer, Player victim, Instant now) {
         Objects.requireNonNull(killer, "killer");
         Objects.requireNonNull(victim, "victim");
-
         if (killer.getUniqueId().equals(victim.getUniqueId())) {
             return CompletableFuture.completedFuture(Decision.block("SELF_KILL"));
         }
@@ -35,9 +35,14 @@ public final class AntiFarmService {
         }
 
         PluginSettings cfg = settings.get();
-        boolean sameIp = sameAddress(killer, victim);
-        if (sameIp && cfg.sameIpPolicy() == PluginSettings.SameIpPolicy.BLOCK) {
+        if (sameAddress(killer, victim) && cfg.sameIpPolicy() == PluginSettings.SameIpPolicy.BLOCK) {
             return CompletableFuture.completedFuture(Decision.block("SAME_IP"));
+        }
+        if (playtimeSeconds(killer) < cfg.minimumHunterPlaytimeSeconds()) {
+            return CompletableFuture.completedFuture(Decision.block("HUNTER_PLAYTIME"));
+        }
+        if (playtimeSeconds(victim) < cfg.minimumTargetPlaytimeSeconds()) {
+            return CompletableFuture.completedFuture(Decision.block("TARGET_PLAYTIME"));
         }
 
         CompletableFuture<BountyRepository.PairHistory> pairFuture =
@@ -54,20 +59,21 @@ public final class AntiFarmService {
                     && now.isBefore(pair.lastClaimAt().plusSeconds(cfg.killerVictimCooldownSeconds()))) {
                 return Decision.block("PAIR_COOLDOWN");
             }
-
             if (pair.windowStart() != null
                     && now.isBefore(pair.windowStart().plusSeconds(cfg.repeatedPairWindowSeconds()))
                     && pair.windowClaims() >= cfg.repeatedPairMaxClaims()) {
                 return Decision.block("REPEATED_PAIR_LIMIT");
             }
-
             if (lastTargetClaim != null && cfg.minimumSurvivalAfterClaimSeconds() > 0
                     && now.isBefore(lastTargetClaim.plusSeconds(cfg.minimumSurvivalAfterClaimSeconds()))) {
                 return Decision.block("TARGET_SURVIVAL_COOLDOWN");
             }
-
             return Decision.allow();
         });
+    }
+
+    private static long playtimeSeconds(Player player) {
+        return Math.max(0L, player.getStatistic(Statistic.PLAY_ONE_MINUTE) / 20L);
     }
 
     private static boolean sameAddress(Player a, Player b) {
@@ -78,12 +84,7 @@ public final class AntiFarmService {
     }
 
     public record Decision(boolean allowed, String reason) {
-        public static Decision allow() {
-            return new Decision(true, "OK");
-        }
-
-        public static Decision block(String reason) {
-            return new Decision(false, reason);
-        }
+        public static Decision allow() { return new Decision(true, "OK"); }
+        public static Decision block(String reason) { return new Decision(false, reason); }
     }
 }
