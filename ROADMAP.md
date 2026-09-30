@@ -28,7 +28,7 @@ CdrBounty stays intentionally focused: **NPC bounty gameplay, moderation, tracki
 | `0.6.0` | BetonQuest / CdrQuestJournal integration | ✅ |
 | `0.7.0` | Shop price integration for wanted players | ✅ |
 | `0.9.0` | Polish, crossplay, anti-abuse, diagnostics | ✅ |
-| `1.0.0` | Production stable / feature freeze | Next |
+| `1.0.0` | Production stable / feature freeze | ✅ |
 
 ## v0.9.0 — Production Hardening ✅
 
@@ -45,16 +45,20 @@ Implemented:
 - startup production-health and crossplay logging;
 - packaged artifact validation for migration/diagnostic classes and config schema.
 
-## v1.0.0 — Production
+## v1.0.0 — Production Stable ✅
 
-Final feature freeze:
-- no new gameplay systems;
-- fresh-install smoke test;
-- upgrade smoke test from 0.7/0.9 data;
-- final administrator guide;
-- permission/command reference;
-- release checksum and artifact verification;
-- production tag/release.
+Finalized:
+- gameplay feature freeze;
+- versioned production artifact `CdrBounty-1.0.0.jar`;
+- final production install/upgrade/smoke-test guide;
+- final command and permission reference;
+- dedicated `cdrbounty.admin.diagnose` permission;
+- CI validation for version metadata, config schema, bundled license, diagnostics, core integrations, and absence of player `/bounty`;
+- release artifact checksum verification workflow.
+
+No new gameplay systems are planned for the 1.0.0 release line unless they are required as compatibility or correctness fixes.
+
+See [`PRODUCTION.md`](PRODUCTION.md) for deployment instructions.
 
 ## After CdrBounty
 
