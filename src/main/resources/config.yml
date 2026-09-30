@@ -1,3 +1,5 @@
+config-version: 9
+
 economy:
   minimum-bounty: 100.00
   maximum-bounty: 100000000.00
@@ -74,6 +76,9 @@ claim:
   repeated-pair-window-seconds: 86400
   repeated-pair-max-claims: 2
   same-ip-policy: BLOCK
+  # Optional anti-alt gates. Keep 0 to disable.
+  minimum-hunter-playtime-seconds: 0
+  minimum-target-playtime-seconds: 0
   minimum-survival-after-claim-seconds: 300
 
 refund:
