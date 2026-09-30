@@ -25,23 +25,41 @@ import java.util.UUID;
 
 @SuppressWarnings("deprecation")
 public final class ContractGuiService implements Listener {
-    private static final String TITLE = ChatColor.DARK_GRAY + "CdrBounty Contracts";
+    private static final String BOARD_TITLE = ChatColor.DARK_GRAY + "Bounty Board";
+    private static final String MY_TITLE = ChatColor.DARK_GRAY + "My Contracts";
 
     private final JavaPlugin plugin;
     private final ContractService contracts;
     private final VaultEconomyAdapter economy;
     private final NamespacedKey contractKey;
+    private final NamespacedKey acceptedKey;
 
     public ContractGuiService(JavaPlugin plugin, ContractService contracts, VaultEconomyAdapter economy) {
         this.plugin = plugin;
         this.contracts = contracts;
         this.economy = economy;
         this.contractKey = new NamespacedKey(plugin, "contract_id");
+        this.acceptedKey = new NamespacedKey(plugin, "contract_accepted");
     }
 
     public void open(Player player) {
-        contracts.browse(player.getUniqueId(), player.hasPermission("cdrbounty.admin.contracts"), 45)
-                .thenAccept(entries -> MainThread.run(plugin, () -> render(player, entries)))
+        load(player, false);
+    }
+
+    public void openMine(Player player) {
+        load(player, true);
+    }
+
+    private void load(Player player, boolean mineOnly) {
+        int limit = mineOnly ? 200 : 45;
+        contracts.browse(player.getUniqueId(), player.hasPermission("cdrbounty.admin.contracts"), limit)
+                .thenAccept(entries -> MainThread.run(plugin, () -> {
+                    if (!player.isOnline()) return;
+                    List<ContractRepository.ContractView> shown = mineOnly
+                            ? entries.stream().filter(ContractRepository.ContractView::viewerAccepted).limit(45).toList()
+                            : entries.stream().limit(45).toList();
+                    render(player, shown, mineOnly);
+                }))
                 .exceptionally(ex -> {
                     plugin.getLogger().warning("Contract GUI failed: " + ex.getMessage());
                     MainThread.run(plugin, () -> player.sendMessage(ChatColor.RED + "Contract browser gagal dimuat."));
@@ -49,33 +67,35 @@ public final class ContractGuiService implements Listener {
                 });
     }
 
-    private void render(Player player, List<ContractRepository.ContractView> entries) {
-        Inventory inventory = Bukkit.createInventory(null, 54, TITLE);
+    private void render(Player player, List<ContractRepository.ContractView> entries, boolean mineOnly) {
+        Inventory inventory = Bukkit.createInventory(null, 54, mineOnly ? MY_TITLE : BOARD_TITLE);
         int slot = 0;
         for (ContractRepository.ContractView entry : entries) {
             if (slot >= 45) break;
-            inventory.setItem(slot++, item(entry));
+            inventory.setItem(slot++, item(entry, mineOnly));
         }
-        ItemStack info = new ItemStack(Material.COMPASS);
-        ItemMeta meta = info.getItemMeta();
-        meta.setDisplayName(ChatColor.GOLD + "Bounty Contract Board");
-        meta.setLore(List.of(
-                ChatColor.GRAY + "Left click: accept contract",
-                ChatColor.GRAY + "Right click: abandon accepted contract",
-                ChatColor.DARK_GRAY + "Progress is per-player."
-        ));
-        info.setItemMeta(meta);
-        inventory.setItem(49, info);
+        if (entries.isEmpty()) {
+            inventory.setItem(22, simple(Material.PAPER,
+                    mineOnly ? ChatColor.GRAY + "Belum Ada Contract" : ChatColor.GRAY + "Board Kosong",
+                    List.of(mineOnly ? ChatColor.DARK_GRAY + "Accept bounty dari Bounty Board dulu."
+                                     : ChatColor.DARK_GRAY + "Belum ada contract yang tersedia.")));
+        }
+        inventory.setItem(49, simple(mineOnly ? Material.WRITABLE_BOOK : Material.COMPASS,
+                mineOnly ? ChatColor.AQUA + "My Contracts" : ChatColor.GOLD + "Bounty Board",
+                mineOnly
+                        ? List.of(ChatColor.GRAY + "Right click = abandon contract.", ChatColor.DARK_GRAY + "Progress tetap per-player.")
+                        : List.of(ChatColor.GRAY + "Left click = accept.", ChatColor.GRAY + "Right click = abandon jika accepted.")));
+        inventory.setItem(53, action(Material.CLOCK, "refresh", ChatColor.GREEN + "Refresh",
+                List.of(ChatColor.GRAY + "Muat ulang daftar.")));
         player.openInventory(inventory);
     }
 
-    private ItemStack item(ContractRepository.ContractView view) {
+    private ItemStack item(ContractRepository.ContractView view, boolean mineOnly) {
         BountyContract contract = view.contract();
         ItemStack item = new ItemStack(view.viewerAccepted() ? Material.WRITABLE_BOOK : Material.PAPER);
         ItemMeta meta = item.getItemMeta();
         OfflinePlayer target = Bukkit.getOfflinePlayer(contract.targetUuid());
-        String targetName = target.getName() == null ? contract.targetUuid().toString() : target.getName();
-        meta.setDisplayName(ChatColor.GOLD + "Contract: " + ChatColor.WHITE + targetName);
+        meta.setDisplayName(ChatColor.GOLD + "Target: " + ChatColor.WHITE + safeName(target));
         List<String> lore = new ArrayList<>();
         lore.add(ChatColor.GRAY + "Reward: " + ChatColor.GOLD + economy.format(contract.rewardAmount()));
         lore.add(ChatColor.GRAY + "Flags: " + ChatColor.WHITE + ContractFlag.serialize(contract.flags()));
@@ -84,8 +104,7 @@ public final class ContractGuiService implements Listener {
         lore.add(ChatColor.GRAY + "Remaining: " + ChatColor.WHITE + remaining(contract.expiresAt()));
         if (view.issuerVisible()) {
             OfflinePlayer issuer = Bukkit.getOfflinePlayer(contract.issuerUuid());
-            lore.add(ChatColor.GRAY + "Issuer: " + ChatColor.WHITE
-                    + (issuer.getName() == null ? contract.issuerUuid().toString() : issuer.getName()));
+            lore.add(ChatColor.GRAY + "Issuer: " + ChatColor.WHITE + safeName(issuer));
         } else {
             lore.add(ChatColor.GRAY + "Issuer: " + ChatColor.DARK_GRAY + "Anonymous");
         }
@@ -97,36 +116,86 @@ public final class ContractGuiService implements Listener {
             }
         }
         lore.add("");
-        lore.add(view.viewerAccepted()
-                ? ChatColor.RED + "Right click to abandon"
-                : ChatColor.GREEN + "Left click to accept");
+        if (view.viewerAccepted()) {
+            lore.add(ChatColor.GREEN + "ACCEPTED");
+            lore.add(ChatColor.RED + "Right click untuk abandon.");
+        } else if (!mineOnly) {
+            lore.add(ChatColor.GREEN + "Left click untuk accept.");
+        }
         meta.setLore(lore);
         meta.getPersistentDataContainer().set(contractKey, PersistentDataType.STRING, contract.id().toString());
+        meta.getPersistentDataContainer().set(acceptedKey, PersistentDataType.INTEGER, view.viewerAccepted() ? 1 : 0);
         item.setItemMeta(meta);
         return item;
     }
 
     @EventHandler
     public void onClick(InventoryClickEvent event) {
-        if (!TITLE.equals(event.getView().getTitle()) || !(event.getWhoClicked() instanceof Player player)) return;
+        String title = event.getView().getTitle();
+        if ((!BOARD_TITLE.equals(title) && !MY_TITLE.equals(title)) || !(event.getWhoClicked() instanceof Player player)) return;
         event.setCancelled(true);
         ItemStack item = event.getCurrentItem();
         if (item == null || !item.hasItemMeta()) return;
-        String raw = item.getItemMeta().getPersistentDataContainer().get(contractKey, PersistentDataType.STRING);
+        ItemMeta meta = item.getItemMeta();
+        String action = meta.getPersistentDataContainer().get(new NamespacedKey(plugin, "contract_gui_action"), PersistentDataType.STRING);
+        if ("refresh".equals(action)) {
+            load(player, MY_TITLE.equals(title));
+            return;
+        }
+        String raw = meta.getPersistentDataContainer().get(contractKey, PersistentDataType.STRING);
         if (raw == null) return;
         UUID contractId;
         try { contractId = UUID.fromString(raw); }
         catch (IllegalArgumentException ignored) { return; }
+        Integer acceptedRaw = meta.getPersistentDataContainer().get(acceptedKey, PersistentDataType.INTEGER);
+        boolean accepted = acceptedRaw != null && acceptedRaw == 1;
+        boolean mine = MY_TITLE.equals(title);
 
-        var future = event.isRightClick() ? contracts.abandon(player, contractId) : contracts.accept(player, contractId);
-        future.thenAccept(result -> MainThread.run(plugin, () -> {
-            if (result.success()) player.sendMessage(ChatColor.GREEN + "Contract updated: " + result.reason());
-            else player.sendMessage(ChatColor.RED + "Contract ditolak: " + result.reason());
-            open(player);
-        })).exceptionally(ex -> {
-            MainThread.run(plugin, () -> player.sendMessage(ChatColor.RED + "Contract action gagal."));
-            return null;
-        });
+        if (accepted) {
+            if (!event.isRightClick()) {
+                player.sendMessage(ChatColor.GRAY + "Right click untuk abandon contract.");
+                return;
+            }
+            contracts.abandon(player, contractId).thenAccept(result -> MainThread.run(plugin, () -> {
+                player.sendMessage(result.success() ? ChatColor.YELLOW + "Contract ditinggalkan."
+                        : ChatColor.RED + "Tidak dapat abandon: " + result.reason());
+                load(player, mine);
+            })).exceptionally(ex -> failure(player, ex));
+            return;
+        }
+        if (mine || !event.isLeftClick()) return;
+        contracts.accept(player, contractId).thenAccept(result -> MainThread.run(plugin, () -> {
+            player.sendMessage(result.success() ? ChatColor.GREEN + "Contract diterima."
+                    : ChatColor.RED + "Contract ditolak: " + result.reason());
+            load(player, false);
+        })).exceptionally(ex -> failure(player, ex));
+    }
+
+    private ItemStack action(Material material, String action, String name, List<String> lore) {
+        ItemStack item = simple(material, name, lore);
+        ItemMeta meta = item.getItemMeta();
+        meta.getPersistentDataContainer().set(new NamespacedKey(plugin, "contract_gui_action"), PersistentDataType.STRING, action);
+        item.setItemMeta(meta);
+        return item;
+    }
+
+    private ItemStack simple(Material material, String name, List<String> lore) {
+        ItemStack item = new ItemStack(material);
+        ItemMeta meta = item.getItemMeta();
+        meta.setDisplayName(name);
+        meta.setLore(lore);
+        item.setItemMeta(meta);
+        return item;
+    }
+
+    private Void failure(Player player, Throwable ex) {
+        plugin.getLogger().warning("Contract GUI action failed: " + ex.getMessage());
+        MainThread.run(plugin, () -> player.sendMessage(ChatColor.RED + "Aksi contract gagal diproses."));
+        return null;
+    }
+
+    private static String safeName(OfflinePlayer player) {
+        return player.getName() == null ? player.getUniqueId().toString() : player.getName();
     }
 
     private static String remaining(Instant expiresAt) {
@@ -136,6 +205,6 @@ public final class ContractGuiService implements Listener {
         long minutes = (seconds % 3600L) / 60L;
         if (days > 0) return days + "d " + hours + "h";
         if (hours > 0) return hours + "h " + minutes + "m";
-        return minutes + "m";
+        return Math.max(1L, minutes) + "m";
     }
 }
