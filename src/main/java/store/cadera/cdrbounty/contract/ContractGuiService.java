@@ -16,6 +16,7 @@ import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.java.JavaPlugin;
 import store.cadera.cdrbounty.core.MainThread;
 import store.cadera.cdrbounty.economy.VaultEconomyAdapter;
+import store.cadera.cdrbounty.storage.BountyMaintenanceRepository;
 import store.cadera.cdrbounty.tracking.BountyTrackerService;
 
 import java.time.Duration;
@@ -109,8 +110,12 @@ public final class ContractGuiService implements Listener {
         lore.add(ChatColor.GRAY + "Hunters: " + ChatColor.WHITE + view.activeHunters() + "/" + contract.reservationLimit());
         lore.add(ChatColor.GRAY + "Remaining: " + ChatColor.WHITE + remaining(contract.expiresAt()));
         if (view.issuerVisible()) {
-            OfflinePlayer issuer = Bukkit.getOfflinePlayer(contract.issuerUuid());
-            lore.add(ChatColor.GRAY + "Issuer: " + ChatColor.WHITE + safeName(issuer));
+            if (BountyMaintenanceRepository.SYSTEM_ISSUER.equals(contract.issuerUuid())) {
+                lore.add(ChatColor.GRAY + "Issuer: " + ChatColor.RED + "SYSTEM");
+            } else {
+                OfflinePlayer issuer = Bukkit.getOfflinePlayer(contract.issuerUuid());
+                lore.add(ChatColor.GRAY + "Issuer: " + ChatColor.WHITE + safeName(issuer));
+            }
         } else {
             lore.add(ChatColor.GRAY + "Issuer: " + ChatColor.DARK_GRAY + "Anonymous");
         }
