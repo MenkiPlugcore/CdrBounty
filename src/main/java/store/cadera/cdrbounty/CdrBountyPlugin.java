@@ -24,6 +24,8 @@ import store.cadera.cdrbounty.economy.VaultEconomyAdapter;
 import store.cadera.cdrbounty.npc.BountyNpcBindingService;
 import store.cadera.cdrbounty.npc.BountyNpcService;
 import store.cadera.cdrbounty.npc.BountyPlacementWizard;
+import store.cadera.cdrbounty.reputation.ReputationAutoBountyRepository;
+import store.cadera.cdrbounty.reputation.ReputationAutoBountyService;
 import store.cadera.cdrbounty.storage.BountyMaintenanceRepository;
 import store.cadera.cdrbounty.storage.BountyRepository;
 import store.cadera.cdrbounty.storage.SQLiteBountyRepository;
@@ -44,6 +46,7 @@ public final class CdrBountyPlugin extends JavaPlugin {
     private ContractRepository contractRepository;
     private ApprovalRepository approvalRepository;
     private TrackingRepository trackingRepository;
+    private ReputationAutoBountyRepository reputationBountyRepository;
     private BountyNpcBindingService npcBinding;
 
     @Override
@@ -64,6 +67,8 @@ public final class CdrBountyPlugin extends JavaPlugin {
             approvalRepository.initialize();
             trackingRepository = new TrackingRepository(settings);
             trackingRepository.initialize();
+            reputationBountyRepository = new ReputationAutoBountyRepository(settings);
+            reputationBountyRepository.initialize();
 
             AntiFarmService antiFarm = new AntiFarmService(repository, maintenance, this::settings);
             BountyPlacementService placement = new BountyPlacementService(this, repository, economy, this::settings);
@@ -75,6 +80,7 @@ public final class CdrBountyPlugin extends JavaPlugin {
             ContractClaimService claim = new ContractClaimService(
                     this, repository, contractRepository, economy, antiFarm, this::settings);
             BountyTrackerService trackers = new BountyTrackerService(this, trackingRepository);
+            ReputationAutoBountyService reputationBounties = new ReputationAutoBountyService(this, reputationBountyRepository);
             ContractGuiService gui = new ContractGuiService(this, contracts, economy, trackers);
             ApprovalAdminGui approvalGui = new ApprovalAdminGui(this, approvals, economy);
             npcBinding = new BountyNpcBindingService(this);
@@ -101,6 +107,7 @@ public final class CdrBountyPlugin extends JavaPlugin {
                     .thenRun(() -> MainThread.run(this, () -> {
                         getLogger().info("Economy + approval + contract recovery scan completed.");
                         trackers.start();
+                        reputationBounties.start();
                         refunds.startExpirationTask();
                         contracts.startMaintenance();
                         approvals.pendingCount().thenAccept(count -> {
@@ -113,7 +120,7 @@ public final class CdrBountyPlugin extends JavaPlugin {
                     });
 
             getLogger().info("CdrBounty " + getPluginMeta().getVersion()
-                    + " enabled with NPC-only access + Admin Approval + Inaccurate Tracking + SQLite + Vault.");
+                    + " enabled with NPC-only access + Approval + Tracking + Reputation Auto-Bounty + SQLite + Vault.");
         } catch (Exception ex) {
             getLogger().severe("CdrBounty failed to start safely: " + rootMessage(ex));
             ex.printStackTrace();
@@ -123,6 +130,7 @@ public final class CdrBountyPlugin extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        if (reputationBountyRepository != null) reputationBountyRepository.close();
         if (trackingRepository != null) trackingRepository.close();
         if (approvalRepository != null) approvalRepository.close();
         if (contractRepository != null) contractRepository.close();
