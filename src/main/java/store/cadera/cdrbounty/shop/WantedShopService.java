@@ -16,11 +16,18 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class WantedShopService implements CdrBountyShopApi {
+    private static final List<Tier> DEFAULT_TIERS = List.of(
+            new Tier(new BigDecimal("10000.00"), 1.10D),
+            new Tier(new BigDecimal("50000.00"), 1.25D),
+            new Tier(new BigDecimal("100000.00"), 1.50D),
+            new Tier(new BigDecimal("500000.00"), 2.00D)
+    );
+
     private final JavaPlugin plugin;
     private final ContractRepository contracts;
     private final Map<UUID, BigDecimal> totals = new ConcurrentHashMap<>();
     private final AtomicBoolean refreshRunning = new AtomicBoolean(false);
-    private volatile List<Tier> tiers = List.of();
+    private volatile List<Tier> tiers = DEFAULT_TIERS;
     private volatile boolean enabled;
 
     public WantedShopService(JavaPlugin plugin, ContractRepository contracts) {
@@ -53,6 +60,10 @@ public final class WantedShopService implements CdrBountyShopApi {
                     plugin.getLogger().warning("Invalid shop-integration tier '" + key + "': minimum-bounty=" + rawMinimum);
                 }
             }
+        }
+        if (parsed.isEmpty()) {
+            parsed.addAll(DEFAULT_TIERS);
+            plugin.getLogger().info("shop-integration.tiers tidak ditemukan/kosong; memakai tier default v0.7.0.");
         }
         parsed.sort(Comparator.comparing(Tier::minimumBounty));
         this.tiers = List.copyOf(parsed);
