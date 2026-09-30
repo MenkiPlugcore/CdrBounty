@@ -7,9 +7,12 @@
 - Added configurable negative reputation thresholds that create system-funded PUBLIC bounty contracts automatically.
 - System bounties bypass player-request admin approval and open immediately.
 - Added cumulative threshold escalation so one large reputation drop can cross multiple configured tiers in one evaluation.
+- Later threshold crossings now top up the same active `OPEN` / `RESERVED` SYSTEM contract instead of creating duplicate Bounty Board cards; its deadline is refreshed when necessary.
+- A new SYSTEM contract is created only when the previously tracked system bounty is no longer active.
 - Added persistent `reputation_auto_bounty_state` to prevent duplicate bounty issuance while a player remains in the same reputation tier.
 - Added configurable `reset-threshold`; recovering above it rearms future automatic escalation.
 - System bounty contribution, structured contract, escalation state, contract history, and audit record are written atomically in one SQLite transaction.
+- Active SYSTEM bounty escalation updates contribution value, contract reward, threshold state, history, and audit atomically.
 - Added startup/join reputation reconciliation for online players.
 - Added optional system-bounty broadcast and direct target notification.
 - Bounty Board now labels reputation-generated bounties with `Issuer: SYSTEM`.
