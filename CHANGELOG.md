@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.7.0 — Shop Price Integration
+
+- Added public `CdrBountyShopApi` through Bukkit ServicesManager.
+- Added synchronous `isWanted(UUID)`, `activeBountyTotal(UUID)`, and `shopBuyMultiplier(UUID)` queries for economy/shop consumers.
+- Added a thread-safe wanted-price cache refreshed from active `OPEN` / `RESERVED` contracts; shop consumers do not query SQLite per hover/click.
+- Pending approval requests do not count as wanted and do not affect shop pricing.
+- Added configurable active-bounty BUY multiplier tiers.
+- Default surcharge now starts at the minimum valid bounty (`100`) so every active wanted state has an economic consequence.
+- Default tiers: `100 → 1.10x`, `50k → 1.25x`, `100k → 1.50x`, `500k → 2.00x`.
+- Added integration target for CdrVephilimEconomy: market price → personal BUY discount → bounty surcharge → final BUY price.
+- SELL prices remain unchanged by CdrBounty.
+- CdrVephilimEconomy RC7 uses the same final quote for Java GUI, Bedrock forms, and server-side transaction revalidation.
+- Added packaged-JAR validation for the public shop API and wanted pricing service.
+
 ## 0.6.0 — Quest Integration
 
 - Added native BetonQuest 3.2.0 integration through `IntegrationService`.
