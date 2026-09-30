@@ -116,9 +116,9 @@ public final class ApprovalAdminGui implements Listener {
         Inventory inventory = Bukkit.createInventory(null, 45, DETAIL_TITLE);
 
         inventory.setItem(10, simple(Material.PLAYER_HEAD, ChatColor.GOLD + "Target",
-                List.of(ChatColor.WHITE + safeName(target), ChatColor.DARK_GRAY + contract.targetUuid())));
+                List.of(ChatColor.WHITE + safeName(target), ChatColor.DARK_GRAY.toString() + contract.targetUuid())));
         inventory.setItem(12, simple(Material.NAME_TAG, ChatColor.GOLD + "Requester",
-                List.of(ChatColor.WHITE + safeName(issuer), ChatColor.DARK_GRAY + contract.issuerUuid())));
+                List.of(ChatColor.WHITE + safeName(issuer), ChatColor.DARK_GRAY.toString() + contract.issuerUuid())));
         inventory.setItem(14, simple(Material.GOLD_INGOT, ChatColor.GOLD + "Reward",
                 List.of(ChatColor.WHITE + economy.format(contract.rewardAmount()))));
         List<String> contractLore = new ArrayList<>();
