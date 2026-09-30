@@ -2,11 +2,11 @@
 
 > **You don't claim bounties. You hunt people.**
 
-CdrBounty is an NPC-driven bounty hunting framework for Paper servers. The beta.1 escrow/recovery core and beta.2 structured contract engine remain intact, while normal players interact entirely through a Citizens Bounty Master NPC.
+CdrBounty is an NPC-driven bounty hunting framework for Paper servers. Normal players interact through a Citizens Bounty Master NPC, while player-created bounty requests require administrator approval before becoming active.
 
 ## Current Release
 
-**CdrBounty `0.2.2-beta.2 — NPC UX Polish`**
+**CdrBounty `0.3.0 — Admin Approval`**
 
 Target: Paper 1.21.11, Java 21, Vault, Citizens, and a Vault-compatible economy provider.
 
@@ -27,69 +27,57 @@ Bounty Master
         │
         └─ Pasang Bounty
              ↓
-           Target
-             ↓
-           Amount
-             ↓
-           Contract Options
-             ├─ PUBLIC / PRIVATE
-             ├─ EXCLUSIVE on/off
-             └─ ANONYMOUS on/off
-             ↓
-           Conditions
-             ├─ Any / Required / Forbidden World
-             └─ Required Weapon
+           Target + Amount + Options + Conditions
              ↓
            Confirmation
              ↓
-           Vault escrow + contract creation
+           Vault escrow
+             ↓
+           PENDING_APPROVAL
+             ↓
+        Admin review
+        ├─ APPROVE → OPEN
+        └─ REJECT  → full requester refund
 ```
 
-The chat steps are private: wizard input is cancelled from public chat. Supported control words are `batal` / `cancel` and, where applicable, `kembali` / `back`.
+Player-created bounties are not visible on the Bounty Board, cannot be accepted, and cannot be claimed while they are `PENDING_APPROVAL`.
 
-Chat-input stages expire after 60 seconds by default. Closing a GUI does not discard the current in-memory draft; clicking the Bounty Master again exposes **Lanjutkan Draft**. Drafts are not persisted across player disconnects or server restarts.
+## Admin Approval
 
-## Placement Confirmation
+Administrators with `cdrbounty.admin.approval` can open:
 
-CdrBounty does not charge the issuer while they are still configuring the draft. The final confirmation screen shows:
+```text
+/cdrbounty approval
+```
 
-- target
-- gross bounty amount
-- placement fee
-- clean bounty reward
-- issuer balance
-- contract flags
-- private hunter count
-- contract duration
-- kill conditions
+The GUI shows all pending requests with requester, target, reward, flags, conditions, and waiting time. Opening a request provides explicit **APPROVE** and **REJECT** actions.
 
-Only pressing **CONFIRM BOUNTY** calls the existing ContractService/BountyPlacementService escrow pipeline.
+Approval starts the bounty's active timer from the approval moment. Rejection returns the requester's full gross placement amount, including the placement fee portion that would otherwise have been consumed.
 
-## Contract Options
+The rejection refund is recovery-safe: a persistent economy intent is written before Vault is called. If the server stops after money moves but before the contract is finalized, startup recovery completes the refund and marks the request rejected.
 
-The NPC wizard exposes the beta.2 contract engine without restoring player commands:
+Funded contracts left in `DRAFT` by an interrupted submission are recovered into `PENDING_APPROVAL`, never silently opened.
 
-- `PUBLIC` — visible and acceptable by eligible hunters.
-- `PRIVATE` — only the issuer-selected hunter allowlist may participate.
-- `EXCLUSIVE` — reserves the contract to one hunter.
-- `ANONYMOUS` — hides the issuer from normal viewers.
+## NPC Placement UX
 
-Flags can be combined where valid, such as an anonymous exclusive bounty.
+The existing NPC wizard supports:
 
-### Conditions
-
-Current NPC-selectable conditions:
-
-- **Required World** — target kill must happen in the selected world.
-- **Forbidden World** — target kill must not happen in the selected world.
-- **Required Weapon** — uses the material currently held in the issuer's main hand.
-
-Condition validation still happens in the contract/claim domain rather than trusting the GUI.
+- `PUBLIC` / `PRIVATE`
+- `EXCLUSIVE`
+- `ANONYMOUS`
+- required world
+- forbidden world
+- required weapon
+- confirmation before escrow
+- `batal` / `cancel`
+- `kembali` / `back`
+- chat-input timeout
+- resumable in-memory drafts
 
 ## NPC Setup
 
 1. Install Citizens, Vault, an economy provider, and CdrBounty.
-2. Create/select the Citizens NPC you want to use as the Bounty Master.
+2. Create/select the Citizens NPC used as Bounty Master.
 3. Stand within 8 blocks and look directly at the NPC.
 4. Run:
 
@@ -100,6 +88,7 @@ Condition validation still happens in the contract/claim domain rather than trus
 Useful admin commands:
 
 ```text
+/cdrbounty approval
 /cdrbounty npc info
 /cdrbounty npc unbind
 /cdrbounty reload
@@ -108,26 +97,15 @@ Useful admin commands:
 /cdrbounty debug
 ```
 
-The binding is persisted in `plugins/CdrBounty/npc.yml` using Citizens NPC UUID + ID.
-
-## Configuration
-
-```yaml
-npc:
-  input-timeout-seconds: 60
-  click-cooldown-millis: 600
-```
-
-`input-timeout-seconds` applies while the wizard is waiting for chat input. `click-cooldown-millis` prevents duplicate menu opens from repeated Citizens interactions.
-
 ## Contract / Economy Safety
 
 - Per-player hunter acceptance; no party/shared hunting.
-- Private contract value is not exposed to unrelated players.
+- Pending requests are neither accept-able nor claimable.
+- Admin approval is permission-gated.
+- Rejection performs a full recoverable refund.
 - Existing anti-farm checks remain in the death-settlement path.
-- Vault escrow, payout intents, refund handling, SQLite persistence, and crash recovery still use the proven beta.1 pipeline.
-- Contract payout still requires the hunter to have accepted the structured contract and to satisfy all configured conditions.
-- GUI actions call the same domain services as the underlying contract engine; the GUI does not bypass validation.
+- Vault escrow, payout intents, refund handling, SQLite persistence, and crash recovery remain authoritative.
+- GUI actions call domain services; UI never bypasses validation.
 
 ## Build
 
@@ -135,13 +113,19 @@ npc:
 mvn clean verify
 ```
 
-The CI build validates the packaged JAR, Citizens dependency, NPC UX classes, version metadata, configuration defaults, and verifies that a player-facing `/bounty` command has not been reintroduced.
+CI validates the packaged JAR, approval classes, Citizens dependency, version metadata, permission registration, and verifies that player `/bounty` has not been reintroduced.
 
 ## Roadmap
 
-The next major milestone is **`v0.3.0 — Hunter System`**: hunter profiles, statistics, rank/progression, streaks, and hunting performance while keeping bounty access NPC-only.
-
-See [`ROADMAP.md`](ROADMAP.md) and [`docs/roadmap/`](docs/roadmap/).
+```text
+0.3.0 ✅ Admin Approval
+0.4.0 → Inaccurate Compass Tracking
+0.5.0 → Reputation Auto-Bounty
+0.6.0 → Quest Integration
+0.7.0 → Shop Price Integration
+0.9.0 → Polish / Crossplay / Anti-Abuse
+1.0.0 → Production
+```
 
 ## License
 
