@@ -1,9 +1,9 @@
 name: CdrBounty
-version: 0.9.0
+version: 1.0.0
 main: store.cadera.cdrbounty.CdrBountyPlugin
 api-version: '1.21'
 author: CADERA
-description: NPC-driven bounty contracts with approval, tracking, reputation, quest, shop integration, and production hardening for Paper 1.21.11.
+description: Production-stable NPC-driven bounty contracts with approval, tracking, reputation, quest, shop integration, and recovery for Paper 1.21.11.
 depend: [Vault, Citizens]
 softdepend: [CdrReputation, BetonQuest, CdrQuestJournal]
 
@@ -33,6 +33,7 @@ permissions:
       cdrbounty.admin.modify: true
       cdrbounty.admin.inspect: true
       cdrbounty.admin.debug: true
+      cdrbounty.admin.diagnose: true
       cdrbounty.admin.contracts: true
       cdrbounty.admin.npc: true
       cdrbounty.admin.approval: true
@@ -43,6 +44,8 @@ permissions:
   cdrbounty.admin.inspect:
     default: op
   cdrbounty.admin.debug:
+    default: op
+  cdrbounty.admin.diagnose:
     default: op
   cdrbounty.admin.contracts:
     default: op
