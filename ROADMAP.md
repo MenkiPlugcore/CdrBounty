@@ -26,95 +26,35 @@ CdrBounty stays intentionally focused: **NPC bounty gameplay, moderation, tracki
 | `0.4.0` | Inaccurate Compass Tracking + paused timer | ✅ |
 | `0.5.0` | CdrReputation automatic system bounty | ✅ |
 | `0.6.0` | BetonQuest / CdrQuestJournal integration | ✅ |
-| `0.7.0` | Shop price integration for wanted players | Next |
-| `0.9.0` | Polish, crossplay, anti-abuse, diagnostics | Planned |
-| `1.0.0` | Production stable | Planned |
+| `0.7.0` | Shop price integration for wanted players | ✅ |
+| `0.9.0` | Polish, crossplay, anti-abuse, diagnostics | ✅ |
+| `1.0.0` | Production stable / feature freeze | Next |
 
-## v0.5.0 — Reputation Auto-Bounty ✅
+## v0.9.0 — Production Hardening ✅
 
 Implemented:
-- CdrReputation event/API hook;
-- configurable negative-reputation thresholds;
-- trusted system-funded PUBLIC contracts;
-- cumulative escalation with duplicate prevention;
-- active system-contract top-up;
-- reset/rearm threshold;
-- shared tracker, pause, anti-farm, settlement, and payout pipeline.
-
-## v0.6.0 — Quest Integration ✅
-
-Implemented native BetonQuest 3.2.0 hooks:
-
-```text
-Actions:
-cdrbounty_create <questKey> <targetNameOrUuid> <amount>
-cdrbounty_cancel <questKey>
-
-Conditions:
-cdrbounty_has <questKey>
-cdrbounty_active <questKey>
-cdrbounty_completed <questKey>
-```
-
-Quest contract behavior:
-- system-funded and bypasses admin approval;
-- `PRIVATE + EXCLUSIVE`;
-- allowlisted to the BetonQuest profile player;
-- automatically accepted;
-- tracker automatically issued;
-- same anti-farm, pause timer, claim, and payout systems as normal bounties;
-- duplicate create calls reuse the current active attempt;
-- terminal attempts can be followed by a new contract for repeatable quest flows;
-- persistent player + quest key bindings in SQLite;
-- atomic contract/binding creation.
-
-Recommended responsibility split:
-
-```text
-Citizens Quest NPC
-        ↓
-BetonQuest
-  ├─ CdrQuestJournal lifecycle/progress
-  └─ CdrBounty hunt state
-        ↓
-CdrReputation / external rewards
-```
-
-A successful `cdrbounty_completed` condition can gate `cdrjournal_progress`, followed by the normal `cdrjournal_prepare → rewards → cdrjournal_finalize` safe turn-in chain.
-
-## v0.7.0 — Wanted Shop Price Integration
-
-Expose a small public service/API for economy plugins such as CdrVephilimEconomy.
-
-Core API intent:
-- `isWanted(UUID)`;
-- active bounty total;
-- configurable BUY price multiplier.
-
-Wanted players can pay higher shop BUY prices while SELL values remain unchanged. The multiplier must be used by both GUI quotes and transaction validation so displayed and charged prices cannot diverge.
-
-## v0.9.0 — Polish / Crossplay / Anti-Abuse
-
-Final beta hardening:
-- Java + Bedrock/Geyser interaction tests;
-- tracker item cleanup/recovery;
-- NPC binding validation;
-- SQLite consistency diagnostics;
-- restart/crash recovery regression;
-- alt/same-IP/repeated-kill abuse review;
-- config migration/default validation;
-- performance pass;
-- startup diagnostics and administrator audit improvements.
+- safe config migration with `config-version: 9` and pre-migration backup;
+- `/cdrbounty diagnose` production health command;
+- SQLite `PRAGMA integrity_check` and orphan-data checks;
+- unresolved economy-operation diagnostics;
+- Citizens Bounty Master resolution diagnostics;
+- integration presence diagnostics including Floodgate detection;
+- automatic stale/duplicate tracker sanitation;
+- optional minimum hunter/target playtime claim gates;
+- existing same-IP, pair cooldown, repeated-pair, and target-survival protections retained;
+- startup production-health and crossplay logging;
+- packaged artifact validation for migration/diagnostic classes and config schema.
 
 ## v1.0.0 — Production
 
-Feature freeze and production release:
-- stable configuration;
+Final feature freeze:
+- no new gameplay systems;
+- fresh-install smoke test;
+- upgrade smoke test from 0.7/0.9 data;
 - final administrator guide;
-- upgrade/migration guide;
 - permission/command reference;
-- fresh-install and upgrade tests;
-- release artifact validation and checksums.
+- release checksum and artifact verification;
+- production tag/release.
 
 ## After CdrBounty
 
