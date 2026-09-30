@@ -5,9 +5,9 @@
 
   <groupId>store.cadera</groupId>
   <artifactId>CdrBounty</artifactId>
-  <version>0.4.0</version>
+  <version>0.5.0</version>
   <name>CdrBounty</name>
-  <description>NPC bounty contracts with approval and inaccurate compass tracking for Paper servers.</description>
+  <description>NPC bounty contracts with approval, tracking, and reputation-driven system bounties for Paper servers.</description>
 
   <properties>
     <maven.compiler.release>21</maven.compiler.release>
