@@ -18,6 +18,10 @@ contract:
   public-reservation-limit: 8
   sync-seconds: 30
 
+npc:
+  input-timeout-seconds: 60
+  click-cooldown-millis: 600
+
 claim:
   blacklisted-worlds: []
   killer-victim-cooldown-seconds: 3600
