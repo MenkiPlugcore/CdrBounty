@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.0.0 — Production Stable
+
+- Declared the gameplay feature set stable and feature-frozen for the 1.0.0 production line.
+- Bumped Maven/plugin metadata and release artifact naming to `1.0.0`.
+- Added `PRODUCTION.md` with fresh-install, upgrade, command, permission, and smoke-test procedures.
+- Added dedicated `cdrbounty.admin.diagnose` permission separate from lower-level debug permission.
+- CI now validates the production JAR version, config schema, bundled MENKIESTES license, diagnostics, core integrations, and the absence of a player `/bounty` command.
+- Kept `config-version: 9`; upgrading from 0.9.0 does not require deleting or resetting the CdrBounty data folder.
+- Preserved the complete 0.9 hardening baseline: recovery-aware economy persistence, SQLite diagnostics, tracker sanitation, crossplay-safe NPC flow, and anti-abuse controls.
+
+## 0.9.0 — Production Hardening
+
+- Added safe missing-key configuration migration with `config-version: 9` and pre-migration backup.
+- Added `/cdrbounty diagnose` production health command.
+- Added SQLite `PRAGMA integrity_check`, orphan contract/hunter/condition/quest-link diagnostics, and unresolved economy-operation reporting.
+- Added Bounty Master NPC resolution diagnostics and installed integration reporting, including Floodgate detection.
+- Added stale and duplicate Bounty Tracker sanitation during refresh/join flows.
+- Added optional minimum hunter/target playtime gates for anti-alt deployments.
+- Retained same-IP blocking, killer/victim pair cooldown, repeated-pair claim limits, and target-survival cooldown.
+- Added startup production-health/crossplay logging and stronger packaged-artifact validation.
+
 ## 0.7.0 — Shop Price Integration
 
 - Added public `CdrBountyShopApi` through Bukkit ServicesManager.
@@ -7,8 +28,7 @@
 - Added a thread-safe wanted-price cache refreshed from active `OPEN` / `RESERVED` contracts; shop consumers do not query SQLite per hover/click.
 - Pending approval requests do not count as wanted and do not affect shop pricing.
 - Added configurable active-bounty BUY multiplier tiers.
-- Default surcharge now starts at the minimum valid bounty (`100`) so every active wanted state has an economic consequence.
-- Default tiers: `100 → 1.10x`, `50k → 1.25x`, `100k → 1.50x`, `500k → 2.00x`.
+- Default tiers: `10k → 1.10x`, `50k → 1.25x`, `100k → 1.50x`, `500k → 2.00x`.
 - Added integration target for CdrVephilimEconomy: market price → personal BUY discount → bounty surcharge → final BUY price.
 - SELL prices remain unchanged by CdrBounty.
 - CdrVephilimEconomy RC7 uses the same final quote for Java GUI, Bedrock forms, and server-side transaction revalidation.
