@@ -2,68 +2,107 @@
 
 > **You don't claim bounties. You hunt people.**
 
-CdrBounty is a gameplay-first bounty hunting framework for Minecraft servers. Instead of stopping at `place bounty -> kill target -> claim money`, CdrBounty is designed around contracts, hunter progression, intelligence gathering, heat/wanted status, target counterplay, capture mechanics, dynamic events, and extensibility.
+CdrBounty is a gameplay-first bounty hunting framework for Paper servers. It keeps the beta.1 escrow/recovery core and layers structured per-player hunting contracts on top of it.
 
-## Project Status
+## Current Release
 
-**Phase:** `beta.2 — Contract Engine` (active development)
+**CdrBounty `0.2.0-beta.2 — Contract Engine`**
 
-**Primary target:** Paper 1.21.11, Java 21
+Target: Paper 1.21.11, Java 21, Vault + a Vault-compatible economy provider.
 
-The beta.1 foundation remains intact: Vault-backed placement/payout, SQLite persistence, crash-aware economy intents, claim locking, anti-farming, expiry/refund processing, and admin tooling. beta.2 adds a structured contract domain and persistent contract storage on top of that foundation.
+### Contract Engine
 
-### beta.2 foundation now present
+- Persistent contract UUID linked to the existing beta.1 escrow contribution.
+- `PUBLIC`, `PRIVATE`, `EXCLUSIVE`, and `ANONYMOUS` contract flags.
+- Lifecycle: `DRAFT -> OPEN/RESERVED -> CLAIMING -> COMPLETED`, with expiry/cancel/void recovery states.
+- Per-player accept and abandon state; party/shared hunting is not used.
+- Private hunter allowlists.
+- Exclusive contracts reserve one hunter slot.
+- Configurable max active contracts per hunter and reservation limit.
+- Serializable conditions:
+  - required world
+  - forbidden world
+  - required weapon/material
+- Contract browser GUI via `/bounty hunt`.
+- Visibility-safe `/bounty view` and `/bounty list`; private contract value is not leaked to unrelated players.
+- Death settlement selects only legacy public bounty value plus structured contracts actually accepted by that hunter and whose conditions pass.
+- Existing beta.1 anti-farm checks still run before payout.
+- Existing beta.1 `claims` + `economy_operations` remain the payout source of truth, preserving crash recovery and double-settlement protection.
+- Contract reconciliation completes/reopens state after restart based on the recovered beta.1 claim result.
+- Contract history/audit persistence.
 
-- Contract UUID + linked escrow contribution.
-- PUBLIC / PRIVATE / EXCLUSIVE / ANONYMOUS flags.
-- Deterministic lifecycle: DRAFT, OPEN, RESERVED, CLAIMING, COMPLETED, FAILED, EXPIRED, CANCELLED, VOIDED.
-- Per-hunter acceptance/abandon state.
-- Private allowlists and reservation limits.
-- Serializable runtime conditions (required world, forbidden world, required weapon).
-- Contract history/audit rows.
-- Visibility filtering that does not expose private contract value through player-facing totals.
-- Claim preparation designed to reuse beta.1 claim/economy tables so recovery remains compatible.
+Vault currency is the supported beta.2 reward provider. Item/command/XP reward providers are intentionally deferred until the integration/API milestone so they can have explicit idempotency contracts rather than unsafe console-command retries.
 
-The command/GUI/death-settlement wiring is being completed in the same beta.2 milestone; do not treat this branch as production-ready yet.
+## Player Commands
 
-## Existing beta.1 Commands
+```text
+/bounty add <player> <amount>
+/bounty view <player>
+/bounty list
 
-Player:
+/bounty hunt
+/bounty contracts
+/bounty create <player> <amount> [options...]
+/bounty accept <contractUuid>
+/bounty abandon <contractUuid>
+```
 
-- `/bounty add <player> <amount>`
-- `/bounty view <player>`
-- `/bounty list`
+Create options:
 
-Administration:
+```text
+public
+private:Hunter1,Hunter2
+anonymous
+exclusive
+world:<world>
+forbidworld:<world>
+weapon:<MATERIAL>
+```
 
-- `/cdrbounty reload`
-- `/cdrbounty add <player> <amount>`
-- `/cdrbounty remove <player> all`
-- `/cdrbounty inspect <player>`
-- `/cdrbounty history <player>`
-- `/cdrbounty debug`
+Example:
+
+```text
+/bounty create Bandit123 25000 exclusive anonymous world:worldrp weapon:DIAMOND_SWORD
+```
+
+## Administration
+
+The beta.1 admin tools remain available:
+
+```text
+/cdrbounty reload
+/cdrbounty add <player> <amount>
+/cdrbounty remove <player> all
+/cdrbounty inspect <player>
+/cdrbounty history <player>
+/cdrbounty debug
+```
+
+## Configuration
+
+```yaml
+contract:
+  max-active-per-hunter: 3
+  public-reservation-limit: 8
+  sync-seconds: 30
+```
+
+Contract duration currently follows `placement.duration-seconds`, so escrow contribution and contract expiry stay aligned.
 
 ## Build
 
-Requirements:
-
-- JDK 21
-- Maven 3.9+
-
 ```bash
-mvn clean test package
+mvn clean verify
 ```
 
-Runtime requirements:
-
-- Paper 1.21.11
-- Vault
-- A Vault-compatible economy provider
+The GitHub Actions build also validates that the packaged JAR contains the Contract Engine and settlement classes.
 
 ## Roadmap
+
+Next milestone after beta.2 is `v0.3.0 — Hunter System`.
 
 See [`ROADMAP.md`](ROADMAP.md) and [`docs/roadmap/`](docs/roadmap/).
 
 ## License
 
-CdrBounty is distributed under the **MENKIESTES SOFTWARE LICENSE v1.0** included in [`LICENSE`](LICENSE). Source availability does not mean open-source redistribution or commercial use is permitted. Third-party dependencies remain under their respective licenses.
+CdrBounty is distributed under the **MENKIESTES SOFTWARE LICENSE v1.0** included in [`LICENSE`](LICENSE). Third-party dependencies remain under their respective licenses.

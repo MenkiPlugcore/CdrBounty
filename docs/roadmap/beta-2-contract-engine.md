@@ -1,131 +1,122 @@
 # CdrBounty beta.2 — Contract Engine
 
-**Status:** Planned
+**Status:** Implemented — `0.2.0-beta.2`
 
 ## Goal
 
-Turn a bounty from a single number into a structured hunting contract with ownership, visibility, reservation, conditions, expiry, and reward composition.
+Turn beta.1 bounty escrow into a structured, persistent hunting contract without replacing the proven beta.1 economy/recovery pipeline.
 
-## Contract Types
+## Implemented Contract Flags
 
-Initial planned types:
+- `PUBLIC` — visible in the normal board; hunter must accept before structured contract value becomes claimable.
+- `PRIVATE` — visible/acceptable only to allowlisted hunters, issuer, or authorized admin.
+- `EXCLUSIVE` — reservation limit is one hunter and the contract transitions to `RESERVED` while accepted.
+- `ANONYMOUS` — issuer identity is hidden from normal viewers.
 
-- `PUBLIC` — any eligible player may claim.
-- `PRIVATE` — only explicitly allowed hunters may participate.
-- `EXCLUSIVE` — one hunter or team reserves the contract.
-- `ANONYMOUS` — issuer identity is hidden from normal players.
-- `ASSASSINATION` — requires configured objectives/conditions.
+Assassination-by-kill is the default beta.2 completion semantic rather than a separate flag. Capture and other completion modes remain later milestones.
 
-Types should be composable where safe, for example an anonymous exclusive contract.
+## Persistence
 
-## Contract Data Model
+Structured contracts link directly to beta.1 `bounty_contributions` through `contribution_id`. New tables are:
 
-Minimum fields:
+- `contracts`
+- `contract_hunters`
+- `contract_allowlist`
+- `contract_conditions`
+- `contract_history`
 
-- Contract UUID.
-- Target UUID.
-- Issuer UUID or system issuer.
-- Type/flags.
-- State.
-- Created time.
-- Activation time.
-- Expiration time.
-- Reward definition.
-- Accepted hunter(s).
-- Reservation limit.
-- Conditions.
-- Completion evidence.
-- Settlement reference.
+This means existing beta.1 bounty value is not migrated into a second economy system. Legacy beta.1 contributions with no contract remain valid public kill bounties.
 
 ## Lifecycle
 
-Planned states:
+Implemented states:
 
 - `DRAFT`
 - `OPEN`
 - `RESERVED`
-- `IN_PROGRESS`
+- `CLAIMING`
 - `COMPLETED`
 - `FAILED`
 - `EXPIRED`
 - `CANCELLED`
 - `VOIDED`
 
-State transitions must remain deterministic and idempotent.
+Creation is recovery-aware: the contract DRAFT is persisted before the linked escrow placement. If escrow becomes ACTIVE but opening the contract is interrupted, reconciliation can promote the DRAFT to OPEN after restart.
 
-## Condition Framework
+Claim settlement reuses beta.1 `claims` and `economy_operations`, so payout intent, balance evidence, and recovery remain centralized.
 
-The condition system should be extensible rather than hard-coded into each contract type.
+## Conditions
 
-Initial candidates:
+Initial serializable conditions implemented with regression tests:
 
-- Required world.
-- Forbidden world.
-- Required weapon/material category.
-- Time limit after acceptance.
-- Solo completion.
-- No assistance.
-- Minimum/maximum distance.
-- Target health threshold at engagement start.
-- Hunter survival requirement.
+- `REQUIRED_WORLD`
+- `FORBIDDEN_WORLD`
+- `REQUIRED_WEAPON`
 
-Each condition should expose:
+Conditions are evaluated when a hunter kills the target. A structured contribution is selected for settlement only if the hunter accepted that contract and all conditions pass.
 
-- Validation at creation time.
-- Runtime tracking requirements.
-- Completion result.
-- Human-readable description.
-- Serialization form.
+## Acceptance / Reservation
 
-## Reward Composition
+Implemented:
 
-A contract reward may contain one or more providers:
+- `/bounty hunt` GUI browser.
+- `/bounty contracts` text browser.
+- `/bounty accept <contractUuid>`.
+- `/bounty abandon <contractUuid>`.
+- Configurable active-contract limit per hunter.
+- Configurable reservation limit for non-exclusive contracts.
+- Exclusive single-hunter reservation.
+- Issuer and target cannot accept their own contract.
+- Private allowlist enforcement.
 
-- Vault currency.
-- ItemStack rewards.
-- Console commands.
-- Experience.
+Command and GUI paths both call the same `ContractService` domain methods.
 
-Future integrations may add custom reward providers through the public API.
+## Creation
 
-Every reward component must participate in settlement tracking so partial failures are detectable and recoverable.
+```text
+/bounty create <player> <amount> [options...]
+```
 
-## Contract Acceptance
+Supported options:
 
-Planned commands/UI actions:
+- `public`
+- `private:Hunter1,Hunter2`
+- `anonymous`
+- `exclusive`
+- `world:<world>`
+- `forbidworld:<world>`
+- `weapon:<MATERIAL>`
 
-- `/bounty hunt`
-- `/bounty accept <contract>`
-- `/bounty abandon <contract>`
-- `/bounty contracts`
-- `/bounty create <player>`
+The linked escrow still applies beta.1 amount, fee, stacking, maximum target value, world, playtime, and Vault balance validation.
 
-Rules include:
+## Visibility Safety
 
-- Maximum active contracts per hunter.
-- Exclusive reservation timeout.
-- Optional abandonment penalty.
-- Rank requirements reserved for v0.3.0.
-- Prevent issuer/target from accepting where inappropriate.
+Player-facing `/bounty view`, `/bounty list`, and the contract browser use viewer-aware totals. Private contract value is not exposed to unrelated players. Admins with `cdrbounty.admin.contracts` can inspect all visible contract state.
 
-## GUI
+## Settlement / Recovery
 
-Contract browser should expose:
+The death pipeline is:
 
-- Target.
-- Reward.
-- Contract type.
-- Remaining time.
-- Hunter slot usage.
-- Conditions.
-- Visibility status.
-- Accept/abandon state.
+```text
+Player death
+ -> eligible legacy + accepted structured contributions
+ -> beta.1 AntiFarmService
+ -> lock selected contributions + contracts
+ -> create standard PREPARED claim + payout INTENT
+ -> Vault deposit
+ -> beta.1 completeClaim
+ -> contract COMPLETED
+```
 
-GUI clicks must call the same domain services as commands; GUI logic must not bypass validation.
+On deposit failure, beta.1 restores locked contributions and beta.2 releases the contract. If a server crash occurs after money moves, beta.1 RecoveryService resolves the economy intent first; beta.2 reconciliation then derives the correct contract state from the recovered claim.
+
+This preserves beta.1 double-settlement protection instead of creating a parallel payout implementation.
+
+## Reward Scope
+
+`0.2.0-beta.2` supports the existing Vault currency escrow provider. ItemStack, console command, and XP reward composition are deferred to the later integration/API milestone. Those providers require explicit idempotency/recovery contracts; blindly replaying external command rewards after a crash would be unsafe.
 
 ## Permissions
-
-Planned additions:
 
 - `cdrbounty.contract.create`
 - `cdrbounty.contract.accept`
@@ -135,53 +126,11 @@ Planned additions:
 - `cdrbounty.contract.exclusive`
 - `cdrbounty.admin.contracts`
 
-## Events
-
-Internal event design should prepare for later public API exposure:
-
-- Contract created.
-- Contract opened.
-- Contract accepted.
-- Contract abandoned.
-- Contract completed.
-- Contract failed.
-- Contract expired.
-- Contract cancelled.
-
-Events that allow cancellation must document exactly when cancellation is still safe relative to escrow settlement.
-
-## Persistence
-
-New persistent state:
-
-- Contracts.
-- Contract participants.
-- Conditions and progress.
-- Reward components.
-- Completion evidence.
-- Reservation/abandonment history.
-
-Migration from beta.1 data must preserve all existing bounty value and ownership information.
-
-## Acceptance Criteria
-
-beta.2 is complete when:
-
-- Public, private, anonymous, and exclusive contracts can be created and completed.
-- Reservation limits are enforced consistently across command and GUI paths.
-- Contract expiry survives restart.
-- Conditions serialize and restore correctly.
-- At least the initial condition set has regression coverage.
-- Reward settlement cannot execute twice.
-- Partial reward failure is recorded and recoverable by admin tooling.
-- Existing beta.1 bounties migrate without value loss.
-- Contract history clearly records issuer, hunter, target, conditions, and result subject to visibility permissions.
-
 ## Explicitly Out of Scope
 
-- Hunter rank/reputation progression.
-- Intel purchases and tracking compass.
-- Heat-generated contracts.
-- Alive capture contracts.
-- Team contracts.
-- Public API stability guarantee.
+- Hunter rank/reputation progression (`v0.3.0`).
+- Intel purchases/tracking (`v0.4.0`).
+- Heat/Wanted generated contracts (`v0.5.0`).
+- Alive capture (`v0.6.0`).
+- Team/party contracts.
+- Stable public API guarantees (`v0.8.0`).
