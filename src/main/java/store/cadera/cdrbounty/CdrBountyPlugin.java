@@ -1,8 +1,10 @@
 package store.cadera.cdrbounty;
 
 import org.bukkit.command.PluginCommand;
+import org.bukkit.plugin.ServicePriority;
 import org.bukkit.plugin.java.JavaPlugin;
 import store.cadera.cdrbounty.antifarm.AntiFarmService;
+import store.cadera.cdrbounty.api.CdrBountyShopApi;
 import store.cadera.cdrbounty.approval.ApprovalAdminGui;
 import store.cadera.cdrbounty.approval.ApprovalRepository;
 import store.cadera.cdrbounty.approval.BountyApprovalService;
@@ -29,6 +31,7 @@ import store.cadera.cdrbounty.quest.QuestBountyRepository;
 import store.cadera.cdrbounty.quest.QuestBountyService;
 import store.cadera.cdrbounty.reputation.ReputationAutoBountyRepository;
 import store.cadera.cdrbounty.reputation.ReputationAutoBountyService;
+import store.cadera.cdrbounty.shop.WantedShopService;
 import store.cadera.cdrbounty.storage.BountyMaintenanceRepository;
 import store.cadera.cdrbounty.storage.BountyRepository;
 import store.cadera.cdrbounty.storage.SQLiteBountyRepository;
@@ -52,6 +55,7 @@ public final class CdrBountyPlugin extends JavaPlugin {
     private ReputationAutoBountyRepository reputationBountyRepository;
     private QuestBountyRepository questBountyRepository;
     private BountyNpcBindingService npcBinding;
+    private WantedShopService wantedShopService;
 
     @Override
     public void onEnable() {
@@ -75,6 +79,8 @@ public final class CdrBountyPlugin extends JavaPlugin {
             reputationBountyRepository.initialize();
             questBountyRepository = new QuestBountyRepository(settings);
             questBountyRepository.initialize();
+            wantedShopService = new WantedShopService(this, contractRepository);
+            getServer().getServicesManager().register(CdrBountyShopApi.class, wantedShopService, this, ServicePriority.Normal);
 
             AntiFarmService antiFarm = new AntiFarmService(repository, maintenance, this::settings);
             BountyPlacementService placement = new BountyPlacementService(this, repository, economy, this::settings);
@@ -131,6 +137,7 @@ public final class CdrBountyPlugin extends JavaPlugin {
                         getLogger().info("Economy + approval + contract recovery scan completed.");
                         trackers.start();
                         reputationBounties.start();
+                        wantedShopService.start();
                         refunds.startExpirationTask();
                         contracts.startMaintenance();
                         approvals.pendingCount().thenAccept(count -> {
@@ -143,7 +150,7 @@ public final class CdrBountyPlugin extends JavaPlugin {
                     });
 
             getLogger().info("CdrBounty " + getPluginMeta().getVersion()
-                    + " enabled with NPC-only access + Approval + Tracking + Reputation + Quest Integration + SQLite + Vault.");
+                    + " enabled with NPC-only access + Approval + Tracking + Reputation + Quest + Shop API + SQLite + Vault.");
         } catch (Exception ex) {
             getLogger().severe("CdrBounty failed to start safely: " + rootMessage(ex));
             ex.printStackTrace();
@@ -153,6 +160,7 @@ public final class CdrBountyPlugin extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        getServer().getServicesManager().unregisterAll(this);
         if (questBountyRepository != null) questBountyRepository.close();
         if (reputationBountyRepository != null) reputationBountyRepository.close();
         if (trackingRepository != null) trackingRepository.close();
@@ -176,6 +184,7 @@ public final class CdrBountyPlugin extends JavaPlugin {
         settings = next;
         messages.reload();
         if (npcBinding != null) npcBinding.load();
+        if (wantedShopService != null) wantedShopService.reloadConfiguration();
     }
 
     private void installDefaultResources() {
