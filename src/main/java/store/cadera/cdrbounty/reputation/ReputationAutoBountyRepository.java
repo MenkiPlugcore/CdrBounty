@@ -76,22 +76,70 @@ public final class ReputationAutoBountyRepository implements AutoCloseable {
             List<ReputationAutoBountyPolicy.Rule> rules,
             Instant now
     ) throws Exception {
-        int lastThreshold = readLastThreshold(targetUuid);
+        AutoState state = readState(targetUuid);
         ReputationAutoBountyPolicy.Decision decision = ReputationAutoBountyPolicy.evaluate(
-                reputation, lastThreshold, resetThreshold, rules);
+                reputation, state.lastThreshold(), resetThreshold, rules);
 
         if (decision.reset()) {
             upsertState(targetUuid, 0, reputation, null, now);
             return EvaluationResult.reset(reputation);
         }
         if (!decision.issue()) {
-            if (stateExists(targetUuid)) updateLastReputation(targetUuid, reputation, now);
-            return EvaluationResult.none(reputation, lastThreshold);
+            if (state.exists()) updateLastReputation(targetUuid, reputation, now);
+            return EvaluationResult.none(reputation, state.lastThreshold());
         }
 
-        BigDecimal amount = MoneyMath.normalize(decision.amount(), settings.decimalScale());
-        if (amount.compareTo(settings.maximumBounty()) > 0) amount = settings.maximumBounty();
-        if (amount.signum() <= 0) return EvaluationResult.none(reputation, lastThreshold);
+        BigDecimal requestedAdd = MoneyMath.normalize(decision.amount(), settings.decimalScale());
+        if (requestedAdd.signum() <= 0) return EvaluationResult.none(reputation, state.lastThreshold());
+
+        ExistingSystemContract existing = activeSystemContract(targetUuid, state.lastContractId(), now);
+        if (existing != null) {
+            BigDecimal room = MoneyMath.normalize(
+                    settings.maximumBounty().subtract(existing.rewardAmount()), settings.decimalScale());
+            BigDecimal add = requestedAdd.min(room);
+            if (add.signum() <= 0) {
+                upsertState(targetUuid, decision.nextThreshold(), reputation, existing.contractId(), now);
+                return EvaluationResult.none(reputation, decision.nextThreshold());
+            }
+            BigDecimal newReward = MoneyMath.normalize(existing.rewardAmount().add(add), settings.decimalScale());
+            BigDecimal newGross = MoneyMath.normalize(existing.grossAmount().add(add), settings.decimalScale());
+            BigDecimal newEscrow = MoneyMath.normalize(existing.escrowAmount().add(add), settings.decimalScale());
+            Instant refreshedExpiry = now.plusSeconds(settings.durationSeconds());
+
+            try (PreparedStatement ps = connection.prepareStatement("""
+                    UPDATE bounty_contributions
+                    SET gross_amount=?,escrow_amount=?,expires_at=CASE WHEN expires_at<? THEN ? ELSE expires_at END,updated_at=?
+                    WHERE id=? AND state='ACTIVE'
+                    """)) {
+                ps.setString(1, newGross.toPlainString());
+                ps.setString(2, newEscrow.toPlainString());
+                ps.setLong(3, refreshedExpiry.toEpochMilli());
+                ps.setLong(4, refreshedExpiry.toEpochMilli());
+                ps.setLong(5, now.toEpochMilli());
+                ps.setString(6, existing.contributionId().toString());
+                if (ps.executeUpdate() != 1) throw new IllegalStateException("AUTO_BOUNTY_ESCROW_NOT_ACTIVE");
+            }
+            try (PreparedStatement ps = connection.prepareStatement("""
+                    UPDATE contracts
+                    SET reward_amount=?,expires_at=CASE WHEN expires_at<? THEN ? ELSE expires_at END,last_error=NULL
+                    WHERE id=? AND state IN ('OPEN','RESERVED')
+                    """)) {
+                ps.setString(1, newReward.toPlainString());
+                ps.setLong(2, refreshedExpiry.toEpochMilli());
+                ps.setLong(3, refreshedExpiry.toEpochMilli());
+                ps.setString(4, existing.contractId().toString());
+                if (ps.executeUpdate() != 1) throw new IllegalStateException("AUTO_BOUNTY_CONTRACT_NOT_ACTIVE");
+            }
+            history(existing.contractId(), "REPUTATION_AUTO_BOUNTY_ESCALATED",
+                    "reputation=" + reputation + "; threshold=" + decision.nextThreshold()
+                            + "; add=" + add.toPlainString() + "; total=" + newReward.toPlainString(), now);
+            audit(targetUuid, add, reputation, decision.nextThreshold(), "ESCALATED", now);
+            upsertState(targetUuid, decision.nextThreshold(), reputation, existing.contractId(), now);
+            return EvaluationResult.issued(existing.contractId(), add, reputation, decision.nextThreshold());
+        }
+
+        BigDecimal amount = requestedAdd.min(settings.maximumBounty());
+        if (amount.signum() <= 0) return EvaluationResult.none(reputation, state.lastThreshold());
 
         UUID contributionId = UUID.randomUUID();
         UUID contractId = UUID.randomUUID();
@@ -133,49 +181,51 @@ public final class ReputationAutoBountyRepository implements AutoCloseable {
             ps.executeUpdate();
         }
 
-        try (PreparedStatement ps = connection.prepareStatement("""
-                INSERT INTO contract_history(id,contract_id,actor_uuid,action,details,created_at)
-                VALUES(?,?,NULL,'REPUTATION_AUTO_BOUNTY',?,?)
-                """)) {
-            ps.setString(1, UUID.randomUUID().toString());
-            ps.setString(2, contractId.toString());
-            ps.setString(3, "reputation=" + reputation + "; threshold=" + decision.nextThreshold()
-                    + "; amount=" + amount.toPlainString());
-            ps.setLong(4, now.toEpochMilli());
-            ps.executeUpdate();
-        }
-
-        try (PreparedStatement ps = connection.prepareStatement("""
-                INSERT INTO audit_log(id,actor_uuid,action,target_uuid,amount,details,created_at)
-                VALUES(?,NULL,'REPUTATION_AUTO_BOUNTY',?,?,?,?)
-                """)) {
-            ps.setString(1, UUID.randomUUID().toString());
-            ps.setString(2, targetUuid.toString());
-            ps.setString(3, amount.toPlainString());
-            ps.setString(4, "reputation=" + reputation + "; threshold=" + decision.nextThreshold());
-            ps.setLong(5, now.toEpochMilli());
-            ps.executeUpdate();
-        }
-
+        history(contractId, "REPUTATION_AUTO_BOUNTY",
+                "reputation=" + reputation + "; threshold=" + decision.nextThreshold()
+                        + "; amount=" + amount.toPlainString(), now);
+        audit(targetUuid, amount, reputation, decision.nextThreshold(), "CREATED", now);
         upsertState(targetUuid, decision.nextThreshold(), reputation, contractId, now);
         return EvaluationResult.issued(contractId, amount, reputation, decision.nextThreshold());
     }
 
-    private int readLastThreshold(UUID targetUuid) throws Exception {
+    private AutoState readState(UUID targetUuid) throws Exception {
         try (PreparedStatement ps = connection.prepareStatement(
-                "SELECT last_threshold FROM reputation_auto_bounty_state WHERE target_uuid=?")) {
+                "SELECT last_threshold,last_contract_id FROM reputation_auto_bounty_state WHERE target_uuid=?")) {
             ps.setString(1, targetUuid.toString());
             try (ResultSet rs = ps.executeQuery()) {
-                return rs.next() ? rs.getInt(1) : 0;
+                if (!rs.next()) return new AutoState(false, 0, null);
+                String raw = rs.getString("last_contract_id");
+                return new AutoState(true, rs.getInt("last_threshold"), raw == null ? null : UUID.fromString(raw));
             }
         }
     }
 
-    private boolean stateExists(UUID targetUuid) throws Exception {
-        try (PreparedStatement ps = connection.prepareStatement(
-                "SELECT 1 FROM reputation_auto_bounty_state WHERE target_uuid=?")) {
-            ps.setString(1, targetUuid.toString());
-            try (ResultSet rs = ps.executeQuery()) { return rs.next(); }
+    private ExistingSystemContract activeSystemContract(UUID targetUuid, UUID contractId, Instant now) throws Exception {
+        if (contractId == null) return null;
+        try (PreparedStatement ps = connection.prepareStatement("""
+                SELECT c.id,c.contribution_id,c.reward_amount,b.gross_amount,b.escrow_amount
+                FROM contracts c
+                JOIN bounty_contributions b ON b.id=c.contribution_id
+                WHERE c.id=? AND c.target_uuid=? AND c.issuer_uuid=?
+                  AND c.state IN ('OPEN','RESERVED') AND b.state='ACTIVE'
+                  AND c.expires_at>? AND b.expires_at>?
+                """)) {
+            ps.setString(1, contractId.toString());
+            ps.setString(2, targetUuid.toString());
+            ps.setString(3, BountyMaintenanceRepository.SYSTEM_ISSUER.toString());
+            ps.setLong(4, now.toEpochMilli());
+            ps.setLong(5, now.toEpochMilli());
+            try (ResultSet rs = ps.executeQuery()) {
+                if (!rs.next()) return null;
+                return new ExistingSystemContract(
+                        UUID.fromString(rs.getString("id")),
+                        UUID.fromString(rs.getString("contribution_id")),
+                        new BigDecimal(rs.getString("reward_amount")),
+                        new BigDecimal(rs.getString("gross_amount")),
+                        new BigDecimal(rs.getString("escrow_amount"))
+                );
+            }
         }
     }
 
@@ -185,6 +235,35 @@ public final class ReputationAutoBountyRepository implements AutoCloseable {
             ps.setInt(1, reputation);
             ps.setLong(2, now.toEpochMilli());
             ps.setString(3, targetUuid.toString());
+            ps.executeUpdate();
+        }
+    }
+
+    private void history(UUID contractId, String action, String details, Instant at) throws Exception {
+        try (PreparedStatement ps = connection.prepareStatement("""
+                INSERT INTO contract_history(id,contract_id,actor_uuid,action,details,created_at)
+                VALUES(?,?,NULL,?,?,?)
+                """)) {
+            ps.setString(1, UUID.randomUUID().toString());
+            ps.setString(2, contractId.toString());
+            ps.setString(3, action);
+            ps.setString(4, details);
+            ps.setLong(5, at.toEpochMilli());
+            ps.executeUpdate();
+        }
+    }
+
+    private void audit(UUID targetUuid, BigDecimal amount, int reputation, int threshold,
+                       String mode, Instant at) throws Exception {
+        try (PreparedStatement ps = connection.prepareStatement("""
+                INSERT INTO audit_log(id,actor_uuid,action,target_uuid,amount,details,created_at)
+                VALUES(?,NULL,'REPUTATION_AUTO_BOUNTY',?,?,?,?)
+                """)) {
+            ps.setString(1, UUID.randomUUID().toString());
+            ps.setString(2, targetUuid.toString());
+            ps.setString(3, amount.toPlainString());
+            ps.setString(4, "mode=" + mode + "; reputation=" + reputation + "; threshold=" + threshold);
+            ps.setLong(5, at.toEpochMilli());
             ps.executeUpdate();
         }
     }
@@ -230,6 +309,10 @@ public final class ReputationAutoBountyRepository implements AutoCloseable {
         catch (InterruptedException ex) { Thread.currentThread().interrupt(); }
         if (connection != null) try { connection.close(); } catch (Exception ignored) { }
     }
+
+    private record AutoState(boolean exists, int lastThreshold, UUID lastContractId) {}
+    private record ExistingSystemContract(UUID contractId, UUID contributionId, BigDecimal rewardAmount,
+                                          BigDecimal grossAmount, BigDecimal escrowAmount) {}
 
     public record EvaluationResult(Action action, UUID contractId, BigDecimal amount,
                                    int reputation, int threshold) {
