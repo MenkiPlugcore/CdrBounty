@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.3.0 — Admin Approval
+
+- Added `PENDING_APPROVAL` and `REJECTED` contract states.
+- Player-created bounties now enter admin review after escrow instead of opening immediately.
+- Added `/cdrbounty approval` for a permission-gated in-game approval GUI.
+- Approval GUI shows requester, target, reward, flags, conditions, and waiting time.
+- APPROVE transitions the request to OPEN and starts a fresh full bounty duration from approval time.
+- REJECT performs a full gross refund to the requester, including the placement-fee portion.
+- Rejection refunds use persistent economy intents and remain recoverable across crashes/restarts.
+- Startup recovery moves funded interrupted DRAFT contracts to PENDING_APPROVAL instead of opening them.
+- Startup reconciliation finalizes pending requests whose rejection refund already completed.
+- Added `cdrbounty.admin.approval` permission (default op).
+- Added approval-state regression coverage and CI artifact validation.
+
 ## 0.2.2-beta.2 — NPC UX Polish
 
 - Added a three-entry Bounty Master menu: Bounty Board, My Contracts, and Pasang Bounty.
