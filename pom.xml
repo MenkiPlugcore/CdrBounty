@@ -5,9 +5,9 @@
 
   <groupId>store.cadera</groupId>
   <artifactId>CdrBounty</artifactId>
-  <version>1.0.0</version>
+  <version>1.1.0</version>
   <name>CdrBounty</name>
-  <description>Production-stable NPC bounty contracts with approval, tracking, reputation, quest, shop integration, and recovery for Paper servers.</description>
+  <description>Production NPC bounty contracts with public player bounties, tracking, reputation, quest, shop integration, and recovery for Paper servers.</description>
 
   <properties>
     <maven.compiler.release>21</maven.compiler.release>
