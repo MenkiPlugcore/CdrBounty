@@ -11,6 +11,7 @@ import store.cadera.cdrbounty.economy.MoneyMath;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -36,22 +37,13 @@ public final class ContractService {
     public CompletableFuture<CreateResult> create(Player issuer, OfflinePlayer target, BigDecimal amount,
                                                    Set<ContractFlag> flags, Set<UUID> allowedHunters,
                                                    List<ContractCondition> conditions) {
-        Set<ContractFlag> safeFlags = flags == null || flags.isEmpty() ? Set.of(ContractFlag.PUBLIC) : Set.copyOf(flags);
-        Set<UUID> safeAllowed = allowedHunters == null ? Set.of() : Set.copyOf(allowedHunters);
+        EnumSet<ContractFlag> normalized = EnumSet.of(ContractFlag.PUBLIC);
+        if (flags != null && flags.contains(ContractFlag.EXCLUSIVE)) normalized.add(ContractFlag.EXCLUSIVE);
+        if (flags != null && flags.contains(ContractFlag.ANONYMOUS)) normalized.add(ContractFlag.ANONYMOUS);
+        Set<ContractFlag> safeFlags = Set.copyOf(normalized);
+        Set<UUID> safeAllowed = Set.of();
         List<ContractCondition> safeConditions = conditions == null ? List.of() : List.copyOf(conditions);
 
-        if (safeFlags.contains(ContractFlag.PUBLIC) && safeFlags.contains(ContractFlag.PRIVATE)) {
-            return CompletableFuture.completedFuture(CreateResult.fail("PUBLIC_PRIVATE_CONFLICT"));
-        }
-        if (safeFlags.contains(ContractFlag.PRIVATE) && safeAllowed.isEmpty()) {
-            return CompletableFuture.completedFuture(CreateResult.fail("PRIVATE_ALLOWLIST_EMPTY"));
-        }
-        if (safeAllowed.contains(target.getUniqueId())) {
-            return CompletableFuture.completedFuture(CreateResult.fail("TARGET_IN_ALLOWLIST"));
-        }
-        if (safeFlags.contains(ContractFlag.PRIVATE) && !issuer.hasPermission("cdrbounty.contract.private")) {
-            return CompletableFuture.completedFuture(CreateResult.fail("NO_PERMISSION_PRIVATE"));
-        }
         if (safeFlags.contains(ContractFlag.ANONYMOUS) && !issuer.hasPermission("cdrbounty.contract.anonymous")) {
             return CompletableFuture.completedFuture(CreateResult.fail("NO_PERMISSION_ANONYMOUS"));
         }
@@ -92,19 +84,20 @@ public final class ContractService {
                         return repository.voidDraft(contractId, result.reason())
                                 .handle((ignored, error) -> CreateResult.fail(result.reason()));
                     }
-                    return approvals.submit(contractId, result.rewardAmount())
+                    Instant activatedAt = Instant.now();
+                    return repository.open(contractId, result.rewardAmount(), activatedAt)
                             .handle((ignored, error) -> {
                                 if (error != null) {
                                     plugin.getLogger().warning("Contract " + contractId
-                                            + " funded but approval submission is pending recovery: " + rootMessage(error));
+                                            + " funded but direct OPEN is pending recovery: " + rootMessage(error));
                                     return CreateResult.recoveryPending(contractId, result.rewardAmount());
                                 }
                                 MainThread.run(plugin, () -> {
                                     if (issuer.isOnline()) {
-                                        issuer.sendMessage("§eRequest bounty sudah dikirim ke admin dan menunggu persetujuan.");
+                                        issuer.sendMessage("§aBounty langsung aktif dan tersedia di Bounty Board.");
                                     }
                                 });
-                                return CreateResult.pending(contractId, result.rewardAmount());
+                                return CreateResult.opened(contractId, result.rewardAmount());
                             });
                 });
     }
@@ -154,11 +147,11 @@ public final class ContractService {
     }
 
     public record CreateResult(boolean success, String reason, UUID contractId, BigDecimal rewardAmount) {
-        public static CreateResult pending(UUID id, BigDecimal amount) {
-            return new CreateResult(true, "PENDING_APPROVAL", id, amount);
+        public static CreateResult opened(UUID id, BigDecimal amount) {
+            return new CreateResult(true, "OPEN", id, amount);
         }
         public static CreateResult recoveryPending(UUID id, BigDecimal amount) {
-            return new CreateResult(true, "APPROVAL_RECOVERY_PENDING", id, amount);
+            return new CreateResult(true, "OPEN_RECOVERY_PENDING", id, amount);
         }
         public static CreateResult fail(String reason) { return new CreateResult(false, reason, null, BigDecimal.ZERO); }
     }
