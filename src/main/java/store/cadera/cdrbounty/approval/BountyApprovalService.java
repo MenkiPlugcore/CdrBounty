@@ -91,7 +91,27 @@ public final class BountyApprovalService {
     }
 
     public CompletableFuture<Integer> reconcile() {
-        return repository.reconcile();
+        return repository.reconcile().thenCompose(changed -> autoOpenPending(200)
+                .thenApply(opened -> changed + opened));
+    }
+
+    private CompletableFuture<Integer> autoOpenPending(int limit) {
+        return repository.listPending(limit).thenCompose(requests -> {
+            CompletableFuture<Integer> chain = CompletableFuture.completedFuture(0);
+            for (ApprovalRepository.ApprovalRequest request : requests) {
+                chain = chain.thenCompose(count -> {
+                    Instant now = Instant.now();
+                    Instant expiresAt = now.plusSeconds(settings.get().durationSeconds());
+                    return repository.approve(
+                                    request.contract().id(),
+                                    BountyMaintenanceRepository.SYSTEM_ISSUER,
+                                    now,
+                                    expiresAt)
+                            .thenApply(result -> count + (result.success() ? 1 : 0));
+                });
+            }
+            return chain;
+        });
     }
 
     public CompletableFuture<Integer> pendingCount() {
