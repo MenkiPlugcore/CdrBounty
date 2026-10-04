@@ -31,7 +31,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          JAR="target/CdrBounty-1.0.0.jar"
+          JAR="target/CdrBounty-1.1.0.jar"
           test -f "$JAR"
           jar tf "$JAR" > jar-contents.txt
           grep -qx 'plugin.yml' jar-contents.txt
@@ -44,10 +44,12 @@ jobs:
           grep -q 'store/cadera/cdrbounty/quest/QuestBountyService.class' jar-contents.txt
           unzip -p "$JAR" plugin.yml > packaged-plugin.yml
           unzip -p "$JAR" config.yml > packaged-config.yml
-          grep -q '^version: 1.0.0$' packaged-plugin.yml
+          grep -q '^version: 1.1.0$' packaged-plugin.yml
           grep -q '^config-version: 9$' packaged-config.yml
           grep -q '^  minimum-hunter-playtime-seconds: 0$' packaged-config.yml
           grep -q '^  minimum-target-playtime-seconds: 0$' packaged-config.yml
+          grep -q '^  cdrbounty.contract.private:' packaged-plugin.yml
+          grep -A1 '^  cdrbounty.contract.private:' packaged-plugin.yml | grep -q 'default: false'
           grep -q '^  cdrbounty.admin.diagnose:' packaged-plugin.yml
           grep -q 'diagnose' packaged-plugin.yml
           grep -q '^depend: \[Vault, Citizens\]$' packaged-plugin.yml
@@ -60,6 +62,6 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v7
         with:
-          name: CdrBounty-1.0.0
-          path: target/CdrBounty-1.0.0.jar
+          name: CdrBounty-1.1.0
+          path: target/CdrBounty-1.1.0.jar
           if-no-files-found: error
